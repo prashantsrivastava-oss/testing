@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Acyclic Calculator — SIP & Lumpsum (Grey/Black Gradient + Total)</title>
+
+<!-- Chart.js (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<style>
+  :root{
+    --grad-start:#3b82f6;
+    --grad-end:#8b5cf6;
+    --muted:#7c8594;
+    --bg:#f6f8fb;
+    --card:#ffffff;
+    --accent:#10b981;
+    --navy:#07102a;
+    --soft:#eaeaea;
+    --radius:14px;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:Inter,system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+    background:var(--bg);
+    color:#0f172a;
+    -webkit-font-smoothing:antialiased;
+    padding:28px;
+    display:flex;
+    justify-content:center;
+  }
+
+  .wrap { width:980px; max-width:98%; }
+  .panel{
+    background:var(--card);
+    border-radius:var(--radius);
+    padding:18px;
+    box-shadow: 0 10px 30px rgba(16,24,40,0.06);
+  }
+
+  .layout{ display:grid; grid-template-columns: 1fr 360px; gap:22px; align-items:start; }
+  @media (max-width:980px){ .layout{ grid-template-columns:1fr; } }
+
+  .left { padding:12px 6px; }
+  .right { padding:12px; display:flex; flex-direction:column; align-items:center; }
+
+  h2{ margin:0 0 6px; font-size:20px; }
+  p.small { margin:4px 0 12px; color:var(--muted); font-size:14px; }
+
+  /* toggle */
+  .toggle{
+    display:flex;
+    gap:10px;
+    margin-bottom:14px;
+  }
+  .toggle button{
+    background:#fff; border:1px solid #e6e7eb; padding:10px 16px; border-radius:10px; cursor:pointer; font-weight:600;
+  }
+  .toggle button.active{
+    background: linear-gradient(135deg,var(--grad-start),var(--grad-end) 50%);
+    color:#fff; border:0; box-shadow:0 8px 22px rgba(59,130,246,0.12);
+  }
+
+  /* control row */
+  .control{
+    margin:14px 0;
+  }
+  .control label{ display:flex; justify-content:space-between; font-weight:600; color:#374151; margin-bottom:8px; }
+  .control .value{ color:#0b1220; font-weight:700; }
+
+  /* slider */
+  input[type="range"]{
+    -webkit-appearance:none; width:100%; height:8px; border-radius:999px; background:var(--soft);
+    outline:none;
+  }
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:18px; height:18px; border-radius:50%;
+    background:linear-gradient(135deg,var(--grad-start),var(--grad-end) 50%); border:3px solid #fff;
+    box-shadow:0 6px 16px rgba(59,130,246,0.18);
+  }
+  input[type="range"]::-moz-range-thumb{
+    width:18px; height:18px; border-radius:50%;
+    background:linear-gradient(135deg,var(--grad-start),var(--grad-end) 50%); border:3px solid #fff;
+  }
+
+  .numInput{
+    width:120px; padding:8px 10px; border-radius:8px; border:1px solid #e6e7eb; font-weight:700; text-align:right;
+    background:#fff;
+  }
+
+  /* right: chart + legend */
+  .donutOuter{ width:280px; height:280px; display:flex; align-items:center; justify-content:center; }
+  .legend{ margin-top:8px; display:flex; gap:20px; align-items:center; justify-content:center; flex-wrap:wrap; }
+  .legend .item{ display:flex; gap:8px; align-items:center; font-weight:700; color:#0b1220; }
+  .swatch{ width:18px; height:18px; border-radius:6px; }
+
+  /* gradient swatches using CSS linear-gradient */
+  .swatch.invested { background: linear-gradient(180deg,#eaeaea,#d6d6d6); border: 1px solid #dcdcdc; }
+  .swatch.returns  { background: linear-gradient(180deg,#222428,#0b0b0d); }
+
+  .rupee{ font-weight:900; margin-left:6px; }
+
+  .gain{ margin-top:12px; font-weight:700; color:#14908b; font-size:18px; }
+
+  .totalRow{ margin-top:8px; font-weight:900; font-size:18px; color:#0b1220; }
+
+  .note{ margin-top:16px; color:var(--muted); font-size:13px; text-align:center; }
+
+</style>
+</head>
+<body>
+  <div class="wrap panel">
+    <h2>SIP Calculator</h2>
+    <p class="small"></p>
+
+    <div class="layout">
+      <!-- left: controls -->
+      <div class="left">
+        <div class="toggle" role="tablist" aria-label="Mode toggle">
+          <button id="modeSIP" class="active" aria-pressed="true">SIP</button>
+          <button id="modeLump" aria-pressed="false">Lumpsum</button>
+        </div>
+
+        <!-- SIP controls -->
+        <div id="sipControls">
+          <div class="control">
+            <label>Monthly Investment <span class="value">₹ <input id="monthlyInput" class="numInput" type="number" min="0" step="1" value="5133"></span></label>
+            <input id="monthlyRange" type="range" min="0" max="50000" value="5133" />
+          </div>
+
+          <div class="control">
+            <label>Expected return rate (p.a.) <span class="value"><input id="rateInput" class="numInput" type="number" step="0.01" min="0" value="6">% </span></label>
+            <input id="rateRange" type="range" min="0" max="20" step="0.1" value="6" />
+          </div>
+
+          <div class="control">
+            <label>Time Period <span class="value"><input id="yearsInput" class="numInput" type="number" step="1" min="0" value="5"> years</span></label>
+            <input id="yearsRange" type="range" min="0" max="40" step="1" value="5" />
+          </div>
+        </div>
+
+        <!-- Lumpsum controls -->
+        <div id="lumpControls" style="display:none;">
+          <div class="control">
+            <label>Lump sum amount <span class="value">₹ <input id="lumpInput" class="numInput" type="number" step="1" min="0" value="100000"></span></label>
+            <input id="lumpRange" type="range" min="0" max="2000000" step="1000" value="100000" />
+          </div>
+
+          <div class="control">
+            <label>Expected return rate (p.a.) <span class="value"><input id="rateInputL" class="numInput" type="number" step="0.01" min="0" value="8">% </span></label>
+            <input id="rateRangeL" type="range" min="0" max="20" step="0.1" value="8" />
+          </div>
+
+          <div class="control">
+            <label>Time Period <span class="value"><input id="yearsInputL" class="numInput" type="number" step="1" min="0" value="5"> years</span></label>
+            <input id="yearsRangeL" type="range" min="0" max="40" step="1" value="5" />
+          </div>
+        </div>
+
+      </div>
+
+      <!-- right: chart + legend -->
+      <div class="right">
+        <div class="donutOuter">
+          <canvas id="donutChart" width="280" height="280" aria-label="Invested vs Returns donut chart"></canvas>
+        </div>
+
+        <div class="legend" role="list" aria-hidden="false">
+          <div class="item"><div class="swatch invested"></div> Invested amount <span id="investedValue" class="rupee">₹0</span></div>
+          <div class="item"><div class="swatch returns"></div> Estimated returns <span id="returnsValue" class="rupee">₹0</span></div>
+        </div>
+
+        <div class="gain" id="gainPct">0%</div>
+        <div class="totalRow">Total value: <span id="totalValue">₹0</span></div>
+
+        <div class="note"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* Helpers */
+function fmtINR(v){
+  return '₹' + Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/* Mode toggle */
+const modeSIP = document.getElementById('modeSIP');
+const modeLump = document.getElementById('modeLump');
+const sipControls = document.getElementById('sipControls');
+const lumpControls = document.getElementById('lumpControls');
+
+/* SIP elements */
+const monthlyRange = document.getElementById('monthlyRange');
+const monthlyInput = document.getElementById('monthlyInput');
+const rateRange = document.getElementById('rateRange');
+const rateInput = document.getElementById('rateInput');
+const yearsRange = document.getElementById('yearsRange');
+const yearsInput = document.getElementById('yearsInput');
+
+/* Lumpsum elements */
+const lumpRange = document.getElementById('lumpRange');
+const lumpInput = document.getElementById('lumpInput');
+const rateRangeL = document.getElementById('rateRangeL');
+const rateInputL = document.getElementById('rateInputL');
+const yearsRangeL = document.getElementById('yearsRangeL');
+const yearsInputL = document.getElementById('yearsInputL');
+
+/* legend & values */
+const investedValue = document.getElementById('investedValue');
+const returnsValue = document.getElementById('returnsValue');
+const gainPct = document.getElementById('gainPct');
+const totalValue = document.getElementById('totalValue');
+
+/* Canvas/chart */
+const canvas = document.getElementById('donutChart');
+const ctx = canvas.getContext('2d');
+
+const donut = new Chart(ctx, {
+  type: 'doughnut',
+  data: {
+    labels: ['Invested','Returns'],
+    datasets: [{
+      data: [1,0],
+      backgroundColor: ['#e8e8e8','#8f93a8'], // placeholders - replaced with gradients in updateGradients()
+      borderWidth: 0,
+      hoverOffset: 8
+    }]
+  },
+  options: {
+    maintainAspectRatio:false,
+    cutout: '72%',
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label(ctx) {
+            const lbl = ctx.label || '';
+            const val = Number(ctx.raw || 0);
+            return lbl + ': ' + fmtINR(val);
+          }
+        }
+      }
+    }
+  }
+});
+
+/* Create and set gradients based on canvas size (vertical gradient) */
+function updateGradients() {
+  // principal: light grey -> darker grey
+  const gradPrincipal = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradPrincipal.addColorStop(0, '#f3f3f3');
+  gradPrincipal.addColorStop(1, '#cfcfcf');
+
+  // returns: dark charcoal -> near-black
+  const gradReturns = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradReturns.addColorStop(0, '#222428'); // dark grey
+  gradReturns.addColorStop(1, '#060608'); // almost black
+
+  donut.data.datasets[0].backgroundColor = [gradPrincipal, gradReturns];
+}
+
+/* Calculations */
+/* SIP future value (payments at end of period): FV = P * [ ((1 + i)^N - 1) / i ] */
+function sipFutureValue(monthly, annualRatePct, years){
+  const r = annualRatePct/100;
+  const i = r/12;
+  const N = Math.max(0, Math.round(years*12));
+  if (i === 0) return monthly * N;
+  const factor = (Math.pow(1 + i, N) - 1) / i;
+  return monthly * factor;
+}
+
+/* Lumpsum FV */
+function lumpsumFutureValue(principal, annualRatePct, years){
+  const r = annualRatePct/100;
+  return principal * Math.pow(1 + r, years);
+}
+
+/* Update UI/chart */
+function update(){
+  updateGradients(); // refresh gradients (in case canvas size changed)
+
+  if (modeSIP.classList.contains('active')) {
+    const monthly = Number(monthlyInput.value) || 0;
+    const rate = Number(rateInput.value) || 0;
+    const years = Number(yearsInput.value) || 0;
+
+    const N = Math.round(years * 12);
+    const invested = monthly * N;
+    const fv = sipFutureValue(monthly, rate, years);
+    const returns = Math.max(0, fv - invested);
+
+    investedValue.textContent = fmtINR(invested);
+    returnsValue.textContent = fmtINR(returns);
+    gainPct.textContent = (invested > 0) ? (Math.round((returns / invested) * 1000) / 10) + '%' : '0%';
+    totalValue.textContent = fmtINR(fv);
+
+    donut.data.datasets[0].data = [invested, returns];
+    donut.update();
+  } else {
+    const principal = Number(lumpInput.value) || 0;
+    const rate = Number(rateInputL.value) || 0;
+    const years = Number(yearsInputL.value) || 0;
+
+    const invested = principal;
+    const fv = lumpsumFutureValue(principal, rate, years);
+    const returns = Math.max(0, fv - invested);
+
+    investedValue.textContent = fmtINR(invested);
+    returnsValue.textContent = fmtINR(returns);
+    gainPct.textContent = (invested > 0) ? (Math.round((returns / invested) * 1000) / 10) + '%' : '0%';
+    totalValue.textContent = fmtINR(fv);
+
+    donut.data.datasets[0].data = [invested, returns];
+    donut.update();
+  }
+}
+
+/* Wire up events (sync inputs) */
+modeSIP.addEventListener('click', () => {
+  modeSIP.classList.add('active'); modeSIP.setAttribute('aria-pressed','true');
+  modeLump.classList.remove('active'); modeLump.setAttribute('aria-pressed','false');
+  sipControls.style.display = 'block'; lumpControls.style.display = 'none';
+  update();
+});
+modeLump.addEventListener('click', () => {
+  modeLump.classList.add('active'); modeLump.setAttribute('aria-pressed','true');
+  modeSIP.classList.remove('active'); modeSIP.setAttribute('aria-pressed','false');
+  sipControls.style.display = 'none'; lumpControls.style.display = 'block';
+  update();
+});
+
+/* SIP sync */
+monthlyRange.addEventListener('input', ()=>{ monthlyInput.value = monthlyRange.value; update(); });
+monthlyInput.addEventListener('input', ()=>{ monthlyRange.value = monthlyInput.value || 0; update(); });
+rateRange.addEventListener('input', ()=>{ rateInput.value = rateRange.value; update(); });
+rateInput.addEventListener('input', ()=>{ rateRange.value = rateInput.value || 0; update(); });
+yearsRange.addEventListener('input', ()=>{ yearsInput.value = yearsRange.value; update(); });
+yearsInput.addEventListener('input', ()=>{ yearsRange.value = yearsInput.value || 0; update(); });
+
+/* Lumpsum sync */
+lumpRange.addEventListener('input', ()=>{ lumpInput.value = lumpRange.value; update(); });
+lumpInput.addEventListener('input', ()=>{ lumpRange.value = lumpInput.value || 0; update(); });
+rateRangeL.addEventListener('input', ()=>{ rateInputL.value = rateRangeL.value; update(); });
+rateInputL.addEventListener('input', ()=>{ rateRangeL.value = rateInputL.value || 0; update(); });
+yearsRangeL.addEventListener('input', ()=>{ yearsInputL.value = yearsRangeL.value; update(); });
+yearsInputL.addEventListener('input', ()=>{ yearsRangeL.value = yearsInputL.value || 0; update(); });
+
+/* Ensure gradients are updated on resize */
+window.addEventListener('resize', ()=>{ update(); });
+
+/* init */
+(function init(){
+  // defaults already set in DOM; ensure lump controls match
+  lumpInput.value = lumpRange.value;
+  rateInputL.value = rateRangeL.value;
+  yearsInputL.value = yearsRangeL.value;
+  update();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Retirement Age Calculator</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#f6f9fc; --card:#fff; --muted:#6b7280; --accent1:#3b82f6; --accent2:#8b5cf6;
+    --radius:12px;
+  }
+  body{margin:0;font-family:Inter,system-ui,Arial;background:var(--bg);color:#0b1220}
+  .wrap{max-width:980px;margin:28px auto;padding:18px}
+  .card{background:var(--card);border-radius:var(--radius);padding:20px;box-shadow:0 10px 30px rgba(12,24,48,0.06)}
+  h1{margin:0 0 8px;font-size:20px}
+  .muted{color:var(--muted);font-size:13px;margin-bottom:12px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+  label{display:block;font-weight:700;margin-bottom:6px;color:#374151;font-size:13px}
+  input, select{width:100%;padding:10px;border-radius:8px;border:1px solid #e6e8eb;background:#fff;font-size:14px}
+  .row{display:flex;gap:10px;align-items:center}
+  .btn{background:linear-gradient(135deg,var(--accent1),var(--accent2));color:#fff;padding:10px 14px;border-radius:10px;border:0;font-weight:700;cursor:pointer}
+  .secondary{background:#eef2ff;padding:8px 10px;border-radius:8px;border:0;cursor:pointer;color:#0b1220}
+  .result{margin-top:14px;display:grid;grid-template-columns:1fr 340px;gap:18px}
+  .panel{background:linear-gradient(180deg,#fff,#fbfdff);padding:12px;border-radius:10px;box-shadow:0 8px 18px rgba(12,24,48,0.03)}
+  .small{font-size:13px;color:var(--muted)}
+  .big{font-weight:800;font-size:18px;margin-top:6px}
+  .chartWrap{position:relative;width:100%;max-width:420px;margin:0 auto}
+  canvas{width:100% !important;height:100% !important;display:block}
+  @media (max-width:900px){ .result{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" role="main" aria-label="Retirement age calculator">
+      <h1>Retirement Age Calculator</h1>
+      <div class="muted">Find the earliest age you can retire given your portfolio, expenses and contributions.</div>
+
+      <div class="grid" id="inputsGrid">
+        <div>
+          <label>Current portfolio (₹)</label>
+          <input id="currentPortfolio" type="number" value="500000" />
+
+          <label style="margin-top:10px">Expected annual return (%)</label>
+          <input id="returnRate" type="number" value="8" step="0.1" />
+
+          <label style="margin-top:10px">Fixed monthly expenses (₹)</label>
+          <input id="fixedExp" type="number" value="30000" />
+
+          <label style="margin-top:10px">Insurance (monthly ₹)</label>
+          <input id="insurance" type="number" value="5000" />
+        </div>
+
+        <div>
+          <label>EMI (monthly ₹)</label>
+          <input id="emi" type="number" value="10000" />
+
+          <label style="margin-top:10px">Monthly investment (₹)</label>
+          <input id="monthlyInvestment" type="number" value="10000" />
+
+          <label style="margin-top:10px">Increase in monthly investment after age (%)</label>
+          <input id="incInvestPct" type="number" value="5" step="0.1" />
+
+          <label style="margin-top:10px">Increase starts at age</label>
+          <input id="incStartAge" type="number" value="45" />
+        </div>
+
+        <div>
+          <label>Inflation (%)</label>
+          <input id="inflation" type="number" value="4" step="0.1" />
+
+          <label style="margin-top:10px">Life expectancy (years)</label>
+          <input id="lifeExp" type="number" value="85" />
+
+          <label style="margin-top:10px">Emergency fund (₹)</label>
+          <input id="emergency" type="number" value="200000" />
+
+          <label style="margin-top:10px">Current age</label>
+          <input id="age" type="number" value="35" />
+        </div>
+
+        <div>
+          <label>Search retirement age up to (max age)</label>
+          <select id="maxRetAge">
+            <!-- will be set relative to life expectancy by JS -->
+            <option value="65">65</option>
+            <option value="70">70</option>
+            <option value="75">75</option>
+            <option value="80">80</option>
+            <option value="85">85</option>
+            <option value="90">90</option>
+          </select>
+
+          <div style="margin-top:12px" class="small">Notes: contributions are added monthly and compounded annually using the expected nominal return. Required lump sum to fund retirement uses the real return (accounts for inflation).</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:14px;align-items:center">
+        <button id="calcBtn" class="btn">Find retirement age</button>
+        <button id="resetBtn" class="secondary">Reset</button>
+        <div class="small" style="margin-left:10px">Earliest feasible retirement age will be shown to the right + chart breakdown.</div>
+      </div>
+
+      <div class="result" id="resultArea">
+        <div class="panel" id="textResults" aria-live="polite">
+          <div><span class="small">Earliest feasible retirement age</span>
+            <div id="retireAgeResult" class="big">—</div>
+          </div>
+
+          <div style="margin-top:12px">
+            <div class="small">Projected pot at retirement</div>
+            <div id="projPot" class="big">—</div>
+          </div>
+
+          <div style="margin-top:8px">
+            <div class="small">Required lump sum to fund expenses (inflation-adjusted)</div>
+            <div id="reqLump" class="big">—</div>
+          </div>
+
+          <div style="margin-top:8px">
+            <div class="small">Shortfall / Surplus</div>
+            <div id="shortfall" class="big">—</div>
+          </div>
+
+          <div style="margin-top:10px" class="small">If no feasible age is found up to the chosen max, the tool reports that you cannot retire by that age with given inputs.</div>
+        </div>
+
+        <div class="panel" style="display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <div class="chartWrap" style="width:320px;height:320px">
+            <canvas id="donut"></canvas>
+          </div>
+          <div style="margin-top:10px" class="small">Breakdown at retirement (Emergency / Expenses PV / Insurance PV / EMI PV / Growth)</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+/* Utilities */
+const fmt = v => '₹' + Math.round(v).toLocaleString();
+const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
+
+/* Financial functions */
+function futureValueLump(pv, annualRate, years){
+  return pv * Math.pow(1 + annualRate, years);
+}
+// future value of monthly contributions (ordinary annuity)
+function futureValueMonthly(pmtMonthly, annualRate, years){
+  const m = 12;
+  const r = Math.pow(1+annualRate, 1/m) - 1; // monthly rate
+  const n = Math.round(years*m);
+  if (Math.abs(r) < 1e-12) return pmtMonthly * n;
+  return pmtMonthly * ( (Math.pow(1+r,n) - 1) / r );
+}
+// present value of annual payments (annuity) using annual real rate
+function presentValueAnnuity(paymentAnnual, realRate, nYears){
+  if (nYears <= 0) return 0;
+  if (Math.abs(realRate) < 1e-12) return paymentAnnual * nYears;
+  return paymentAnnual * (1 - Math.pow(1 + realRate, -nYears)) / realRate;
+}
+// convert nominal and inflation to real annual return
+function realRate(nominal, inflation){ return (1 + nominal) / (1 + inflation) - 1; }
+
+/* DOM */
+const ids = ['currentPortfolio','returnRate','fixedExp','insurance','emi','monthlyInvestment','incInvestPct','incStartAge','inflation','lifeExp','emergency','age','maxRetAge'];
+const $ = id => document.getElementById(id);
+
+function readInputs(){
+  return {
+    cur: Number($('currentPortfolio').value) || 0,
+    nominalReturn: (Number($('returnRate').value) || 0)/100,
+    fixedMonthly: Number($('fixedExp').value) || 0,
+    insuranceMonthly: Number($('insurance').value) || 0,
+    emiMonthly: Number($('emi').value) || 0,
+    monthlyInvestment: Number($('monthlyInvestment').value) || 0,
+    incInvestPct: (Number($('incInvestPct').value) || 0)/100,
+    incStartAge: Number($('incStartAge').value) || 45,
+    inflation: (Number($('inflation').value) || 0)/100,
+    lifeExp: Number($('lifeExp').value) || 85,
+    emergency: Number($('emergency').value) || 0,
+    age: Number($('age').value) || 35,
+    maxRetAge: Number($('maxRetAge').value) || 70
+  };
+}
+
+/* main routine:
+   For each candidate retirement age A from current age .. min(maxRetAge, lifeExp-1):
+     - yearsToRetire = A - currentAge
+     - project pot at A:
+         FV = futureValueLump(currentPortfolio, nominalReturn, yearsToRetire)
+         plus contributions: but contributions may increase after a certain age -> we model two phases:
+           phase1: from currentAge until incStartAge (or until retirement if earlier) -> monthlyInvestment
+           phase2: from incStartAge until retirement -> monthlyInvestment * (1 + incInvestPct)
+       compute FV contributions by summing futureValueMonthly for each phase with appropriate years and then compounding the earlier-phase contributions through remaining years
+     - compute desired annual expense at retirement = (fixedMonthly + insuranceMonthly + emiMonthly) * 12 adjusted for inflation to retirement:
+         annualExpenseAtRetire = baseAnnualExpense * (1 + inflation)^{yearsToRetire}
+     - required lump to fund that annual expense for retirementYears = lifeExp - A using realRate
+         requiredLump = presentValueAnnuity(annualExpenseAtRetire, realRate(nominalReturn, inflation), retirementYears)
+     - also include emergency fund as buffer
+     - if FV >= requiredLump + emergency => feasible
+   Pick earliest feasible A
+*/
+function projectPotAtAge(inputs, targetAge){
+  const {cur, nominalReturn, monthlyInvestment, incInvestPct, incStartAge, age} = inputs;
+  const yearsToRetire = Math.max(0, targetAge - age);
+
+  // future value of current lump
+  const fvLump = futureValueLump(cur, nominalReturn, yearsToRetire);
+
+  // contributions: two phases possible
+  const phase1End = Math.min(targetAge, incStartAge);
+  const yearsPhase1 = Math.max(0, phase1End - age);
+  const yearsPhase2 = Math.max(0, targetAge - Math.max(age, incStartAge));
+
+  // contributions made in phase1: monthlyInvestment for yearsPhase1 -> future value at end of phase1
+  const fvPhase1_atPhase1End = futureValueMonthly(monthlyInvestment, nominalReturn, yearsPhase1);
+  // that amount then compounds for remaining yearsPhase2
+  const fvPhase1_compounded = fvPhase1_atPhase1End * Math.pow(1 + nominalReturn, yearsPhase2);
+
+  // contributions in phase2: monthlyInvestment * (1 + incInvestPct)
+  const pmt2 = monthlyInvestment * (1 + incInvestPct);
+  const fvPhase2 = futureValueMonthly(pmt2, nominalReturn, yearsPhase2);
+
+  const totalFV = fvLump + fvPhase1_compounded + fvPhase2;
+  return totalFV;
+}
+
+function findEarliestRetirement(inputs){
+  const start = inputs.age;
+  const last = Math.min(inputs.maxRetAge, inputs.lifeExp - 1); // can't retire at lifeExp
+  const results = [];
+
+  for (let A = start; A <= last; A++){
+    const yearsToRetire = A - inputs.age;
+    const pot = projectPotAtAge(inputs, A);
+
+    // base annual expense today
+    const baseAnnual = (inputs.fixedMonthly + inputs.insuranceMonthly + inputs.emiMonthly) * 12;
+    // inflate to retirement
+    const annualAtRetire = baseAnnual * Math.pow(1 + inputs.inflation, yearsToRetire);
+
+    const retirementYears = Math.max(1, inputs.lifeExp - A);
+    const rr = realRate(inputs.nominalReturn, inputs.inflation);
+    const requiredLump = presentValueAnnuity(annualAtRetire, rr, retirementYears);
+
+    // we require pot >= requiredLump + emergency
+    const requirement = requiredLump + inputs.emergency;
+
+    results.push({age:A, pot, requiredLump, requirement, annualAtRetire, retirementYears});
+    if (pot >= requirement) return { feasible:true, foundAge:A, data:{age:A, pot, requiredLump, requirement, annualAtRetire, retirementYears} };
+  }
+  return { feasible:false, examined:results };
+}
+
+/* Donut gradient helper: vertical black->grey gradients */
+const donutCanvas = document.getElementById('donut');
+function makeDonutGradients(n, ctx){
+  const rect = donutCanvas.getBoundingClientRect();
+  const h = Math.max(donutCanvas.height, Math.round(rect.height));
+  const grads = [];
+  for (let i=0;i<n;i++){
+    const t = i / Math.max(1, n-1);
+    const top = Math.round(220 - t*160);
+    const bottom = Math.max(20, top - 90);
+    const g = ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0, `rgb(${top},${top},${top})`);
+    g.addColorStop(1, `rgb(${bottom},${bottom},${bottom})`);
+    grads.push(g);
+  }
+  return grads;
+}
+
+let donutChart = null;
+function renderDonut(breakdown){
+  if (donutChart) try{ donutChart.destroy(); }catch(e){}
+  const ctx = donutCanvas.getContext('2d');
+  const labels = breakdown.labels;
+  const values = breakdown.values;
+  const grads = makeDonutGradients(values.length, ctx);
+
+  donutChart = new Chart(ctx, {
+    type:'doughnut',
+    data:{ labels, datasets:[{ data: values, backgroundColor: grads, borderWidth:0, cutout:'62%' }]},
+    options:{
+      maintainAspectRatio:false,
+      plugins:{
+        legend:{position:'bottom'},
+        tooltip:{callbacks:{label: c => {
+          const total = values.reduce((a,b)=>a+b,0);
+          const pct = total ? (c.raw/total*100).toFixed(1) : '0.0';
+          return `${c.label}: ${fmt(c.raw)} (${pct}%)`;
+        }}}
+      }
+    }
+  });
+}
+
+/* respond to UI */
+$('calcBtn').addEventListener('click', () => {
+  const raw = readInputs();
+  // ensure maxRetAge at least current age
+  raw.maxRetAge = Math.max(raw.maxRetAge, raw.age);
+
+  const res = findEarliestRetirement(raw);
+  if (res.feasible){
+    const d = res.data;
+    $('retireAgeResult').textContent = d.age + ' years';
+    $('projPot').textContent = fmt(d.pot);
+    $('reqLump').textContent = fmt(d.requiredLump);
+    const diff = d.pot - d.requirement;
+    $('shortfall').textContent = diff >= 0 ? `Surplus ${fmt(diff)}` : `Shortfall ${fmt(Math.abs(diff))}`;
+
+    // Build breakdown at retirement age:
+    // We'll compute PV of expense streams (annualAtRetire) and PV of insurance & EMI separately (using real rate)
+    const rr = realRate(raw.nominalReturn, raw.inflation);
+    const retirementYears = d.retirementYears;
+
+    // PV of annual expenses (this includes fixed+insurance+emi inflated already) - but to split, compute PV of fixed, insurance, emi separately:
+    const baseFixedAnnual = raw.fixedMonthly * 12 * Math.pow(1 + raw.inflation, d.age - raw.age);
+    const fixedAnnualAtRetire = raw.fixedMonthly * 12 * Math.pow(1 + raw.inflation, d.age - raw.age + (d.age - raw.age)); // simplified; instead use d.annualAtRetire proportion
+    // Simpler: split proportionally from baseAnnual
+    const baseAnnualNow = (raw.fixedMonthly + raw.insuranceMonthly + raw.emiMonthly) * 12;
+    const fixedNow = raw.fixedMonthly * 12;
+    const insNow = raw.insuranceMonthly * 12;
+    const emiNow = raw.emiMonthly * 12;
+    const totalNow = fixedNow + insNow + emiNow;
+    let pvFixed=0, pvIns=0, pvEmi=0;
+    if (totalNow > 0){
+      const requiredLump = d.requiredLump;
+      pvFixed = requiredLump * (fixedNow/totalNow);
+      pvIns = requiredLump * (insNow/totalNow);
+      pvEmi = requiredLump * (emiNow/totalNow);
+    } else {
+      pvFixed = pvIns = pvEmi = 0;
+    }
+
+    const growth = Math.max(0, d.pot - raw.emergency - (pvFixed + pvIns + pvEmi));
+
+    const breakdown = {
+      labels: ['Emergency fund','Fixed expenses (PV)','Insurance (PV)','EMI (PV)','Growth remainder'],
+      values: [raw.emergency, pvFixed, pvIns, pvEmi, growth]
+    };
+    renderDonut(breakdown);
+  } else {
+    $('retireAgeResult').textContent = 'No feasible age found up to ' + raw.maxRetAge;
+    $('projPot').textContent = '—';
+    $('reqLump').textContent = '—';
+    $('shortfall').textContent = '—';
+    // render donut using last examined (optional)
+    if (res.examined && res.examined.length){
+      const last = res.examined[res.examined.length - 1];
+      const rawAnnualNow = (raw.fixedMonthly + raw.insuranceMonthly + raw.emiMonthly) * 12;
+      const rr = realRate(raw.nominalReturn, raw.inflation);
+      const retirementYears = Math.max(1, raw.lifeExp - last.age);
+      const requiredLump = last.requiredLump;
+      const pvFixed = raw.fixedMonthly * 12 / (raw.fixedMonthly*12 + raw.insuranceMonthly*12 + raw.emiMonthly*12) * requiredLump || 0;
+      const pvIns = raw.insuranceMonthly*12 / (raw.fixedMonthly*12 + raw.insuranceMonthly*12 + raw.emiMonthly*12) * requiredLump || 0;
+      const pvEmi = raw.emiMonthly*12 / (raw.fixedMonthly*12 + raw.insuranceMonthly*12 + raw.emiMonthly*12) * requiredLump || 0;
+      const growth = Math.max(0, last.pot - raw.emergency - (pvFixed + pvIns + pvEmi));
+      renderDonut({
+        labels: ['Emergency fund','Fixed expenses (PV)','Insurance (PV)','EMI (PV)','Growth remainder'],
+        values: [raw.emergency, pvFixed, pvIns, pvEmi, growth]
+      });
+    } else {
+      // empty donut
+      renderDonut({ labels: ['No data'], values: [1] });
+    }
+  }
+});
+
+/* reset */
+$('resetBtn').addEventListener('click', () => {
+  $('currentPortfolio').value = 500000;
+  $('returnRate').value = 8;
+  $('fixedExp').value = 30000;
+  $('insurance').value = 5000;
+  $('emi').value = 10000;
+  $('monthlyInvestment').value = 10000;
+  $('incInvestPct').value = 5;
+  $('incStartAge').value = 45;
+  $('inflation').value = 4;
+  $('lifeExp').value = 85;
+  $('emergency').value = 200000;
+  $('age').value = 35;
+  $('maxRetAge').value = 70;
+  // trigger one calc to update UI
+  document.getElementById('calcBtn').click();
+});
+
+/* initialize to sensible defaults */
+document.getElementById('calcBtn').click();
+</script>
+</body>
+</html>

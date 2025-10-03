@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>RD Calculator — All In One</title>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<style>
+  :root{
+    --bg:#f7fafc;
+    --muted:#6b7280;
+    --grad: linear-gradient(135deg,#3b82f6,#8b5cf6 50%);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);font-family:Inter,system-ui,Arial;color:#0b1220}
+  .page{display:flex;align-items:flex-start;justify-content:center;padding:28px}
+  .card{width:420px;max-width:96%;background:#fff;border-radius:14px;padding:20px 22px;box-shadow:0 14px 40px rgba(12,24,48,0.08)}
+  h1{margin:0 0 8px;font-size:20px}
+  .muted{color:var(--muted);font-size:13px;margin-bottom:12px}
+
+  label{display:block;font-weight:600;color:#374151;margin-bottom:8px;font-size:14px}
+  /* Deposit (full width) */
+  .deposit{width:100%;padding:12px 14px;font-size:15px;border-radius:12px;border:1px solid #e6e8eb;background:#fff;margin-bottom:14px}
+
+  /* Row: rate + tenure */
+  .row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+  .col{flex:1;display:flex;flex-direction:column}
+  .small{flex:0 0 auto;max-width:110px;min-width:80px}
+  .input{padding:12px 12px;border-radius:10px;border:1px solid #e6e8eb;font-size:14px;background:#fff}
+
+  /* big gradient button */
+  .calcBtn{
+    margin-top:16px;width:100%;padding:14px;border-radius:12px;border:0;color:white;font-weight:800;font-size:16px;
+    cursor:pointer;background:var(--grad);box-shadow:0 14px 28px rgba(59,130,246,0.14);
+  }
+
+  /* Results (no border) */
+  .results{margin-top:14px;font-size:15px;color:#111827}
+  .resultsGrid{display:flex;justify-content:space-between;gap:12px}
+  .resultsCell{flex:1}
+  .mutedSmall{font-size:13px;color:var(--muted)}
+
+  /* Chart area */
+  .chartWrap{margin-top:18px;display:flex;flex-direction:column;align-items:center;gap:12px}
+  .donutBox{width:300px;height:300px;position:relative}
+  canvas{width:100% !important;height:100% !important;display:block}
+  .innerHole{position:absolute;left:22%;top:22%;width:56%;height:56%;border-radius:50%;background:linear-gradient(#fff,#fbfcfd);box-shadow:inset 0 8px 18px rgba(0,0,0,0.04);z-index:2;pointer-events:none}
+  .centerText{position:absolute;left:0;top:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:3;pointer-events:none}
+  .centerText .percent{font-size:34px;font-weight:800;color:#14908b}
+  .centerText .label{font-size:12px;color:var(--muted);margin-top:6px}
+
+  .legend{display:flex;gap:14px;align-items:center;color:var(--muted)}
+  .sw{width:14px;height:14px;border-radius:4px;display:inline-block;vertical-align:middle;margin-right:8px}
+
+  /* external tooltip */
+  .extTooltip{position:fixed;pointer-events:none;background:#0b1220;color:#fff;padding:8px 12px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(2,6,23,0.45);transform:translate(-50%,-120%);z-index:9999;display:none;min-width:150px}
+
+  @media (max-width:480px){
+    .card{width:94%;padding:16px}
+    .donutBox{width:240px;height:240px}
+    .small{max-width:120px;min-width:90px}
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="card" role="main" aria-label="RD Calculator">
+      <h1>Value RD Calculator</h1>
+      <div class="muted">Enter deposit, interest and tenure. Click <strong>Calculate</strong>.</div>
+
+      <!-- Deposit -->
+      <label for="deposit">Deposit Amount (₹)</label>
+      <input id="deposit" class="deposit" type="number" min="0" value="100000" aria-label="Deposit amount">
+
+      <!-- Rate + Tenure -->
+      <div class="row" role="group" aria-label="Rate and Tenure">
+        <div class="col">
+          <label for="rate">Interest Rate (%)</label>
+          <input id="rate" class="input" type="number" step="0.01" min="0" value="8" aria-label="Interest rate">
+        </div>
+
+        <div class="small">
+          <label for="tenure">Tenure (yrs)</label>
+          <input id="tenure" class="input" type="number" step="1" min="1" value="2" aria-label="Tenure in years">
+        </div>
+      </div>
+
+      <button id="calcBtn" class="calcBtn" aria-label="Calculate">Calculate</button>
+
+      <!-- Clean results (no bordered box) -->
+      <div class="results" aria-live="polite">
+        <div class="resultsGrid">
+          <div class="resultsCell">
+            <div class="mutedSmall">Principal invested</div>
+            <div id="sumPrincipal">—</div>
+          </div>
+          <div class="resultsCell">
+            <div class="mutedSmall">Total interest</div>
+            <div id="sumInterest">—</div>
+          </div>
+        </div>
+
+        <div class="resultsGrid" style="margin-top:8px">
+          <div class="resultsCell">
+            <div class="mutedSmall">Maturity amount</div>
+            <div id="sumMaturity">—</div>
+          </div>
+          <div class="resultsCell" style="text-align:right">
+            <div class="mutedSmall">Tenure (months)</div>
+            <div id="sumMonths">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="chartWrap" aria-hidden="false">
+        <div class="donutBox" role="img" aria-label="Donut chart showing interest vs principal">
+          <canvas id="donut" width="720" height="720"></canvas>
+          <div class="innerHole" aria-hidden="true"></div>
+          <div class="centerText" aria-hidden="true">
+            <div class="percent" id="centerPercent">0%</div>
+            <div class="label">gain</div>
+          </div>
+        </div>
+
+        <div class="legend">
+          <div><span class="sw" id="swInterest"></span> Total interest <b id="legendInterest" style="margin-left:6px;color:#0b1220">—</b></div>
+          <div style="margin-left:10px"><span class="sw" id="swPrincipal"></span> Total investment <b id="legendPrincipal" style="margin-left:6px;color:#0b1220">—</b></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="extTooltip" class="extTooltip" role="tooltip" aria-hidden="true"></div>
+
+<script>
+/* formatting helpers */
+function fmtINR0(v){ return '₹' + Number(v).toLocaleString('en-IN', { minimumFractionDigits:0, maximumFractionDigits:0 }); }
+function fmtINR2(v){ return '₹' + Number(v).toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 }); }
+function round2(v){ return Math.round(v*100)/100; }
+
+/* DOM */
+const deposit = document.getElementById('deposit');
+const rate = document.getElementById('rate');
+const tenure = document.getElementById('tenure');
+const calcBtn = document.getElementById('calcBtn');
+
+const sumPrincipal = document.getElementById('sumPrincipal');
+const sumInterest = document.getElementById('sumInterest');
+const sumMaturity = document.getElementById('sumMaturity');
+const sumMonths = document.getElementById('sumMonths');
+
+const legendPrincipal = document.getElementById('legendPrincipal');
+const legendInterest = document.getElementById('legendInterest');
+const swPrincipal = document.getElementById('swPrincipal');
+const swInterest = document.getElementById('swInterest');
+
+const centerPercent = document.getElementById('centerPercent');
+
+const canvas = document.getElementById('donut');
+const ctx = canvas.getContext('2d');
+const extTooltip = document.getElementById('extTooltip');
+
+/* Chart.js — donut with two slices: interest (index 0) & principal (index 1) */
+const donut = new Chart(ctx, {
+  type: 'doughnut',
+  data: {
+    labels: ['Interest','Principal'],
+    datasets: [{
+      data: [0,1],
+      backgroundColor: ['#bdbdbd','#0b0b0b'], // placeholders; replaced by gradients
+      borderWidth: 0,
+      cutout: '60%',
+      rotation: -0.25 * Math.PI,
+      hoverOffset: 8
+    }]
+  },
+  options: {
+    maintainAspectRatio: false,
+    animation: { animateRotate: true, duration: 600, easing: 'easeOutCubic' },
+    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+    events: ['mousemove','mouseout','click','touchstart','touchmove']
+  }
+});
+
+/* apply vertical black<->grey gradients sized to canvas height */
+function applyGradients(){
+  const h = canvas.height || 720;
+  const gInterest = ctx.createLinearGradient(0,0,0,h);
+  gInterest.addColorStop(0, '#cfcfd6');
+  gInterest.addColorStop(1, '#9ea1b2');
+
+  const gPrincipal = ctx.createLinearGradient(0,0,0,h);
+  gPrincipal.addColorStop(0, '#222226');
+  gPrincipal.addColorStop(1, '#000000');
+
+  donut.data.datasets[0].backgroundColor = [gInterest, gPrincipal];
+
+  // swatches
+  const s1 = document.createElement('canvas'); s1.width=14; s1.height=14;
+  s1.getContext('2d').fillStyle = gInterest; s1.getContext('2d').fillRect(0,0,14,14);
+  swInterest.style.backgroundImage = `url(${s1.toDataURL()})`; swInterest.style.backgroundSize = '14px 14px';
+
+  const s2 = document.createElement('canvas'); s2.width=14; s2.height=14;
+  s2.getContext('2d').fillStyle = gPrincipal; s2.getContext('2d').fillRect(0,0,14,14);
+  swPrincipal.style.backgroundImage = `url(${s2.toDataURL()})`; swPrincipal.style.backgroundSize = '14px 14px';
+}
+
+/* RD closed-form (month-end deposits):
+   interest = P * n*(n+1)/2 * (r/12)
+   principal = P * n
+*/
+function calculateRDmonthly(P, annualRatePct, years){
+  const n = Math.round(years * 12);
+  const r = Number(annualRatePct) / 100;
+  const interest = round2(P * (n * (n + 1) / 2) * (r / 12));
+  const principal = round2(P * n);
+  const maturity = round2(principal + interest);
+  return { principal, interest, maturity, months: n };
+}
+
+/* store last computed values for tooltip */
+let lastPrincipal = 0, lastInterest = 0;
+
+/* update UI & chart */
+function updateAll(){
+  const P = Number(deposit.value);
+  const r = Number(rate.value);
+  const y = Number(tenure.value);
+
+  // basic validation
+  if (!Number.isFinite(P) || P <= 0 || !Number.isFinite(r) || r < 0 || !Number.isFinite(y) || y <= 0) {
+    alert('Please enter valid positive values.');
+    return;
+  }
+
+  const res = calculateRDmonthly(P, r, y);
+  lastPrincipal = res.principal;
+  lastInterest = res.interest;
+
+  sumPrincipal.textContent = fmtINR0(res.principal);
+  sumInterest.textContent = fmtINR0(res.interest);
+  sumMaturity.textContent = fmtINR2(res.maturity);
+  sumMonths.textContent = res.months;
+
+  legendPrincipal.textContent = fmtINR0(res.principal);
+  legendInterest.textContent = fmtINR0(res.interest);
+
+  centerPercent.textContent = res.principal > 0 ? (Math.round((res.interest / res.principal) * 1000) / 10) + '%' : '0%';
+
+  applyGradients();
+  donut.data.datasets[0].data = [res.interest, res.principal];
+  donut.update();
+}
+
+/* Tooltip positioning (external) — avoids overlapping donut center */
+function showTooltipAt(evt, elements){
+  if (!elements || elements.length === 0) {
+    extTooltip.style.display = 'none';
+    extTooltip.setAttribute('aria-hidden','true');
+    return;
+  }
+  const el = elements[0];
+  const idx = el.index;
+  const label = donut.data.labels[idx] || (idx === 0 ? 'Interest' : 'Principal');
+  const value = idx === 0 ? lastInterest : lastPrincipal;
+  extTooltip.innerHTML = `<div style="opacity:0.95"><b>${label}:</b> ${fmtINR2(value)}</div>
+                          <div style="opacity:0.85;margin-top:6px">Maturity: <b>${fmtINR2(lastInterest + lastPrincipal)}</b></div>`;
+  extTooltip.style.display = 'block';
+  extTooltip.setAttribute('aria-hidden','false');
+
+  const rect = canvas.getBoundingClientRect();
+  const clientX = evt.clientX || (evt.touches && evt.touches[0] && evt.touches[0].clientX);
+  const clientY = evt.clientY || (evt.touches && evt.touches[0] && evt.touches[0].clientY);
+
+  const cx = rect.left + rect.width/2;
+  const cy = rect.top + rect.height/2;
+  const innerRadiusClient = (rect.width * 0.60) / 2;
+
+  let left = clientX;
+  let top = clientY - 60;
+
+  // if tooltip overlaps center, move above the donut
+  const tooltipH = 70;
+  const wouldOverlapCenter = (left > rect.left && left < rect.right && (top + tooltipH) > (cy - innerRadiusClient/2) && top < (cy + innerRadiusClient/2));
+  if (wouldOverlapCenter) top = cy - innerRadiusClient - tooltipH - 8;
+
+  const margin = 8;
+  if (left < margin) left = margin;
+  if (left > window.innerWidth - margin) left = window.innerWidth - margin;
+
+  extTooltip.style.left = left + 'px';
+  extTooltip.style.top = top + 'px';
+}
+
+/* wire canvas mouse events */
+canvas.addEventListener('mousemove', (evt) => {
+  const pts = donut.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false);
+  if (pts.length) { showTooltipAt(evt, pts); return; }
+  const ptsIdx = donut.getElementsAtEventForMode(evt, 'index', { intersect: false }, false);
+  if (ptsIdx.length) { showTooltipAt(evt, ptsIdx); return; }
+  extTooltip.style.display = 'none';
+  extTooltip.setAttribute('aria-hidden','true');
+});
+canvas.addEventListener('mouseleave', ()=>{ extTooltip.style.display = 'none'; extTooltip.setAttribute('aria-hidden','true'); });
+
+/* wire calculate button */
+calcBtn.addEventListener('click', updateAll);
+
+/* initialize with defaults */
+applyGradients();
+updateAll();
+
+/* keep gradients updated on resize */
+window.addEventListener('resize', ()=>{ applyGradients(); donut.update(); });
+</script>
+</body>
+</html>

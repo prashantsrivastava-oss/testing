@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Value FD Calculator — Tooltip shows both values</title>
+<style>
+  :root{ --grad-start:#3b82f6; --grad-end:#8b5cf6; --muted:#6b7280; }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:Inter,system-ui,Arial; background:#fff;
+    display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px;
+  }
+  .card{
+    width:380px; background:#fff; border-radius:14px; padding:20px;
+    box-shadow:0 10px 30px rgba(16,24,40,0.08);
+  }
+  h2{ margin:0 0 12px; text-align:center; color:#111827; font-size:18px; }
+  label{ display:block; font-size:13px; color:#374151; font-weight:600; margin-top:8px; }
+  input, select{
+    width:100%; padding:10px 12px; margin-top:6px; border-radius:8px;
+    border:1px solid #e5e7eb; font-size:14px; background:#fff;
+  }
+  .controls{ display:flex; gap:8px; margin-top:6px; }
+  .controls input{ flex:1; }
+  .btn{
+    margin-top:14px; width:100%; padding:11px; border-radius:10px; border:0; cursor:pointer;
+    color:#fff; font-weight:700; font-size:15px;
+    background: linear-gradient(135deg, var(--grad-start), var(--grad-end) 50%);
+    box-shadow:0 8px 20px rgba(59,130,246,0.16);
+  }
+
+  .donut-wrap{ width:260px; height:260px; position:relative; margin:18px auto 0; display:flex; align-items:center; justify-content:center; }
+  .innerHole{ position:absolute; width:58%; height:58%; border-radius:50%; background:linear-gradient(#fff,#f6f7fb); box-shadow:inset 0 6px 12px rgba(0,0,0,0.04); z-index:2; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .centerText{ position:absolute; z-index:3; text-align:center; pointer-events:none; }
+  .centerText .percent{ color:#14908b; font-size:30px; font-weight:700; line-height:1; }
+  .centerText .label{ color:#374151; font-size:12px; margin-top:6px; }
+  #result{ margin-top:12px; text-align:center; font-weight:600; color:#111827; }
+  .muted{ text-align:center; color:var(--muted); font-size:13px; margin-top:6px; }
+
+  /* tooltip */
+  .tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: #111827;
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    transform: translate(-50%, -120%);
+    white-space: nowrap;
+    box-shadow: 0 6px 16px rgba(16,24,40,0.2);
+    z-index: 9999;
+    display: none;
+  }
+  .tooltip .item { opacity: 0.9; }
+  .tooltip .bold { font-weight: 700; opacity: 1; }
+
+  @media (max-width:420px){
+    .card{ width:100%; padding:16px; }
+    .donut-wrap{ width:220px; height:220px; }
+    .centerText .percent{ font-size:26px; }
+  }
+</style>
+</head>
+<body>
+  <div class="card" role="main" aria-label="Value FD Calculator">
+    <h2>Value FD Calculator</h2>
+
+    <label>Deposit Amount (₹)</label>
+    <input id="principal" type="number" min="0" placeholder="Enter amount" value="100000" />
+
+    <div class="controls">
+      <div style="flex:1">
+        <label>Interest Rate (%)</label>
+        <input id="rate" type="number" step="0.01" min="0" placeholder="e.g. 8" value="8" />
+      </div>
+      <div style="width:110px">
+        <label>Tenure (yrs)</label>
+        <input id="time" type="number" step="0.1" min="0" placeholder="e.g. 2" value="2" />
+      </div>
+    </div>
+
+    <label style="margin-top:10px">Compounding</label>
+    <select id="compounding">
+      <option value="">--Select--</option>
+      <option value="1" selected>Yearly</option>
+      <option value="4">Quarterly</option>
+      <option value="12">Monthly</option>
+      <option value="365">Daily</option>
+    </select>
+
+    <button class="btn" id="calcBtn">Calculate</button>
+
+    <div class="donut-wrap" aria-hidden="false">
+      <svg id="donutSvg" viewBox="0 0 260 260" width="100%" height="100%" aria-hidden="true" style="display:block">
+        <defs>
+          <linearGradient id="gInterest" x1="0%" x2="100%">
+            <stop offset="0%" stop-color="#2b2b2b" />
+            <stop offset="100%" stop-color="#000000" />
+          </linearGradient>
+          <linearGradient id="gPrincipal" x1="0%" x2="100%">
+            <stop offset="0%" stop-color="#f3f3f3" />
+            <stop offset="100%" stop-color="#bfbfbf" />
+          </linearGradient>
+        </defs>
+
+        <!-- draw principal as full ring (no gap) -->
+        <g transform="rotate(-20 130 130)">
+          <circle id="principalArc" cx="130" cy="130" r="92" fill="none"
+            stroke="url(#gPrincipal)" stroke-width="40" stroke-linecap="round" />
+        </g>
+
+        <!-- interest arc drawn on top -->
+        <g transform="rotate(-20 130 130)">
+          <circle id="interestArc" cx="130" cy="130" r="92" fill="none"
+            stroke="url(#gInterest)" stroke-width="40" stroke-linecap="round"
+            stroke-dasharray="0 9999" stroke-dashoffset="0" />
+        </g>
+      </svg>
+
+      <div class="innerHole" aria-hidden="true"></div>
+
+      <div class="centerText" aria-hidden="true">
+        <div class="percent" id="centerPercent">0%</div>
+        <div class="label">gain</div>
+      </div>
+    </div>
+
+    <div id="result">Enter values and click Calculate</div>
+    <div class="muted">Black = Interest earned · Grey = Principal</div>
+  </div>
+
+  <!-- custom tooltip element -->
+  <div id="tooltip" class="tooltip" role="tooltip" aria-hidden="true"></div>
+
+<script>
+(function(){
+  const principalInput = document.getElementById('principal');
+  const rateInput = document.getElementById('rate');
+  const timeInput = document.getElementById('time');
+  const compSelect = document.getElementById('compounding');
+  const btn = document.getElementById('calcBtn');
+
+  const interestArc = document.getElementById('interestArc');
+  const principalArc = document.getElementById('principalArc');
+  const centerPercent = document.getElementById('centerPercent');
+  const resultEl = document.getElementById('result');
+  const svg = document.getElementById('donutSvg');
+  const tooltip = document.getElementById('tooltip');
+
+  const R = 92;
+  const STROKE = 40;
+  const CIRC = 2 * Math.PI * R;
+  const rotationDeg = -20;
+  const startAngleDeg = -90 + rotationDeg;
+
+  function fmtINR(v){
+    return Number(v).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+
+  function updateDonut(interest, principal){
+    interest = Number(interest) || 0;
+    principal = Number(principal) || 0;
+    const total = (interest + principal) || 1;
+
+    // interest arc length visual
+    let interestLen = CIRC * (interest / total);
+
+    // tiny overlap to hide seam
+    const overlap = Math.min(CIRC * 0.012, interestLen * 0.05);
+    interestLen = Math.min(CIRC, interestLen + overlap);
+
+    interestArc.setAttribute('stroke-dasharray', `${interestLen} ${CIRC - interestLen}`);
+    interestArc.setAttribute('stroke-dashoffset', 0);
+
+    const percentGain = principal > 0 ? (interest / principal) * 100 : 0;
+    const display = Math.round(percentGain * 10) / 10;
+    centerPercent.textContent = (isFinite(display) ? display : 0) + '%';
+
+    resultEl.innerHTML = `<strong>Maturity:</strong> ₹${fmtINR(interest + principal)} &nbsp;&nbsp; <strong>Interest:</strong> ₹${fmtINR(interest)}`;
+
+    // store values for tooltip/hittest
+    svg._last = { interest: interest, principal: principal, interestRatio: interest/total, interestLen, total };
+  }
+
+  function showAlert(msg){
+    alert('⚠️ ' + msg);
+  }
+  function validateInputs(P, rPct, T, nVal){
+    if (P === '' || rPct === '' || T === '' || nVal === ''){
+      showAlert('Please fill all fields before calculating.');
+      return false;
+    }
+    const Pn = Number(P), rn = Number(rPct), Tn = Number(T), nn = Number(nVal);
+    if (isNaN(Pn) || isNaN(rn) || isNaN(Tn) || isNaN(nn)){
+      showAlert('Please enter valid numeric values in all fields.');
+      return false;
+    }
+    if (Pn <= 0 || rn < 0 || Tn <= 0 || nn <= 0){
+      showAlert('Please enter positive values (principal & tenure must be > 0).');
+      return false;
+    }
+    return true;
+  }
+
+  function calculateFD(){
+    const P = principalInput.value.trim();
+    const rPct = rateInput.value.trim();
+    const T = timeInput.value.trim();
+    const nVal = compSelect.value.trim();
+
+    if (!validateInputs(P, rPct, T, nVal)) return;
+
+    const Pnum = Number(P);
+    const r = Number(rPct) / 100;
+    const Tnum = Number(T);
+    const n = Number(nVal);
+
+    const A = Pnum * Math.pow(1 + r / n, n * Tnum);
+    const interest = A - Pnum;
+
+    updateDonut(interest, Pnum);
+  }
+
+  // Hit test (maps client coords to SVG coords and decides segment)
+  function getSvgPoint(evt){
+    const rect = svg.getBoundingClientRect();
+    return {
+      xSvg: ((evt.clientX - rect.left) / rect.width) * svg.viewBox.baseVal.width,
+      ySvg: ((evt.clientY - rect.top) / rect.height) * svg.viewBox.baseVal.height,
+      clientX: evt.clientX,
+      clientY: evt.clientY
+    };
+  }
+
+  function angleInArc(angle, start, sweep) {
+    const diff = (angle - start + 360) % 360;
+    return diff >= 0 && diff <= sweep + 1e-6;
+  }
+
+  function hitTest(evt){
+    const p = getSvgPoint(evt);
+    const cx = svg.viewBox.baseVal.width / 2;
+    const cy = svg.viewBox.baseVal.height / 2;
+    const dx = p.xSvg - cx;
+    const dy = p.ySvg - cy;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const inner = R - STROKE/2 - 1;
+    const outer = R + STROKE/2 + 1;
+    if (dist < inner || dist > outer) return null;
+
+    let ang = Math.atan2(dy, dx) * 180 / Math.PI;
+    if (ang < 0) ang += 360;
+    const start = (startAngleDeg + 360) % 360;
+    const sweep = (svg._last && svg._last.interestRatio) ? svg._last.interestRatio * 360 : 0;
+
+    if (angleInArc(ang, start, sweep)) return 'interest';
+    return 'principal';
+  }
+
+  // Tooltip content shows both values; bolds hovered one
+  function showTooltip(evt, hoveredSegment){
+    const last = svg._last || { interest:0, principal:0 };
+    const interestText = `Interest: ₹${fmtINR(last.interest)}`;
+    const principalText = `Principal: ₹${fmtINR(last.principal)}`;
+    // build HTML with bold for hovered
+    let html;
+    if (hoveredSegment === 'interest'){
+      html = `<div class="item bold">${interestText}</div><div class="item">${principalText}</div>`;
+    } else if (hoveredSegment === 'principal'){
+      html = `<div class="item">${interestText}</div><div class="item bold">${principalText}</div>`;
+    } else {
+      html = `<div class="item">${interestText}</div><div class="item">${principalText}</div>`;
+    }
+    tooltip.innerHTML = html;
+    tooltip.style.display = 'block';
+    tooltip.style.left = evt.clientX + 'px';
+    tooltip.style.top = evt.clientY + 'px';
+    tooltip.setAttribute('aria-hidden','false');
+  }
+
+  function hideTooltip(){
+    tooltip.style.display = 'none';
+    tooltip.setAttribute('aria-hidden','true');
+  }
+
+  svg.addEventListener('mousemove', (e) => {
+    const hit = hitTest(e);
+    if (!hit) { hideTooltip(); return; }
+    showTooltip(e, hit);
+  });
+  svg.addEventListener('mouseleave', hideTooltip);
+  svg.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    if (!t) return;
+    const fake = { clientX: t.clientX, clientY: t.clientY };
+    const hit = hitTest(fake);
+    if (!hit) { hideTooltip(); return; }
+    showTooltip(fake, hit);
+  });
+  svg.addEventListener('touchend', hideTooltip);
+
+  btn.addEventListener('click', calculateFD);
+  [principalInput, rateInput, timeInput].forEach(el => el.addEventListener('keydown', e => {
+    if (e.key === 'Enter') calculateFD();
+  }));
+
+  // init draw
+  (function init(){
+    const P = principalInput.value.trim();
+    const rPct = rateInput.value.trim();
+    const T = timeInput.value.trim();
+    const nVal = compSelect.value.trim();
+    if (P && rPct && T && nVal){
+      calculateFD();
+    } else {
+      updateDonut(0, Number(P) || 0);
+    }
+  })();
+
+  window.addEventListener('resize', () => {
+    const last = svg._last || null;
+    if (last) updateDonut(last.interest, last.principal);
+  });
+})();
+</script>
+</body>
+</html>

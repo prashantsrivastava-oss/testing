@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Value FD — Fill → Calculate → Results</title>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<style>
+  :root{
+    --grad-start: #3b82f6;
+    --grad-end: #8b5cf6;
+    --muted:#6b7280;
+    --danger:#dc2626;
+    --card-bg:#ffffff;
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:Inter,system-ui,Arial; background:#f6f8fb;
+    padding:28px; display:flex; justify-content:center;
+  }
+  .wrap{ width:940px; max-width:96%; }
+
+  .panel{
+    background:var(--card-bg);
+    border-radius:var(--radius);
+    box-shadow:0 10px 30px rgba(16,24,40,0.06);
+    padding:20px;
+  }
+
+  .title{ font-size:20px; margin:0 0 8px; color:#0b1220; }
+  .subtitle{ color:var(--muted); margin:0 0 18px; }
+
+  /* layout */
+  .layout{ display:grid; grid-template-columns:1fr 420px; gap:20px; align-items:start; }
+  @media (max-width:980px){ .layout{ grid-template-columns:1fr; } }
+
+  /* form */
+  label{ display:block; font-size:13px; color:#374151; font-weight:600; margin-top:8px; }
+  input[type="number"], select { width:100%; padding:10px 12px; margin-top:8px; border-radius:10px; border:1px solid #e6e7eb; font-size:14px; background:#fff; }
+  .row{ display:flex; gap:12px; align-items:flex-start; }
+  .small{ width:140px; }
+  .btn{
+    margin-top:16px; padding:12px 16px; border-radius:12px; border:0; color:#fff; font-weight:700;
+    background:linear-gradient(135deg,var(--grad-start),var(--grad-end) 50%); cursor:pointer; width:100%;
+    box-shadow:0 8px 24px rgba(59,130,246,0.14);
+  }
+  .secondary{ background:#111827; color:#fff; width:auto; padding:10px 12px; border-radius:10px; cursor:pointer; }
+
+  .inline-error{ color:var(--danger); font-size:13px; margin-top:6px; display:none; }
+
+  /* summary / chart */
+  .summaryList{ margin-top:12px; font-size:14px; color:#374151; }
+  .summaryList dt{ font-weight:600; float:left; clear:left; width:55%; color:#4b5563; margin-bottom:10px; }
+  .summaryList dd{ margin-left:55%; margin-bottom:10px; font-weight:700; color:#0b1220; }
+
+  .donutWrap{ display:flex; align-items:center; justify-content:center; padding-top:8px; }
+  canvas{ max-width:320px; max-height:320px; }
+
+  .centerPercent{ text-align:center; margin-top:8px; font-weight:700; color:#14908b; font-size:20px; }
+
+  .actions{ margin-top:12px; display:flex; gap:12px; }
+  .note{ font-size:13px; color:var(--muted); margin-top:10px; }
+
+  /* transitions */
+  .hidden{ display:none !important; }
+  .fadeIn { animation: fadeIn .28s ease both; }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform:none; } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1 class="title">Please Enter your FD investment details</h1>
+      <p class="subtitle"></p>
+
+      <div class="layout">
+        <!-- LEFT: FORM -->
+        <div id="formPane" class="fadeIn">
+          <label>Amount invested (₹)</label>
+          <input id="principal" type="number" placeholder="Enter the amount" value="10000" />
+          <div id="errPrincipal" class="inline-error">Investment amount is required</div>
+
+          <div class="row" style="margin-top:6px;">
+            <div style="flex:1">
+              <label>Interest rate (%)</label>
+              <input id="rate" type="number" step="0.01" placeholder="Enter the interest rate" value="8" />
+              <div id="errRate" class="inline-error">interest rate is required</div>
+            </div>
+
+            <div style="width:140px">
+              <label>Tenure (yrs)</label>
+              <input id="time" type="number" step="0.1" placeholder="e.g. 2" value="2" />
+              <div id="errTime" class="inline-error">tenure years is required</div>
+            </div>
+          </div>
+
+          <label style="margin-top:10px">Interest type</label>
+          <div style="display:flex; gap:12px; margin-top:8px;">
+            <label><input type="radio" name="itype" value="compound" checked> Compound</label>
+            <label><input type="radio" name="itype" value="simple"> Simple</label>
+          </div>
+
+          <div id="freqWrap" style="margin-top:10px;">
+            <label>Compounding frequency</label>
+            <select id="freq">
+              <option value="12">Monthly</option>
+              <option value="4">Quarterly</option>
+              <option value="1">Yearly</option>
+            </select>
+          </div>
+
+          <label style="margin-top:12px">Bank (breakage policy)</label>
+          <select id="bank">
+            <option value="">-- Select bank policy --</option>
+            <option value="standard">Standard Bank — penalty 1% of interest</option>
+            <option value="conservative">Conservative — &lt;3 months no interest; else penalty 0.5%</option>
+            <option value="generous">Generous — penalty 0.2% of interest</option>
+          </select>
+          <div id="errBank" class="inline-error">bank name is required</div>
+
+          <label style="margin-top:12px">Invested on</label>
+          <div class="row">
+            <div style="flex:1">
+              <label style="font-weight:600; font-size:12px; margin:6px 0 0;">Month</label>
+              <select id="investMonth">
+                <option value="">Select</option>
+                <option value="1">January</option><option value="2">February</option><option value="3">March</option>
+                <option value="4">April</option><option value="5">May</option><option value="6">June</option>
+                <option value="7">July</option><option value="8">August</option><option value="9">September</option>
+                <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+              </select>
+            </div>
+            <div style="width:160px">
+              <label style="font-weight:600; font-size:12px; margin:6px 0 0;">Year</label>
+              <select id="investYear"></select>
+            </div>
+          </div>
+          <div id="errInv" class="inline-error">investment month & year required</div>
+
+          <button id="calcBtn" class="btn">Calculate</button>
+        </div>
+
+        <!-- RIGHT: RESULTS (hidden initially) -->
+        <div id="resultPane" class="panel summaryCard hidden" aria-live="polite">
+          <div class="donutWrap">
+            <canvas id="donut" width="320" height="320"></canvas>
+          </div>
+          <div class="centerPercent" id="centerGain">0%</div>
+
+          <h3 style="margin-top:12px">Current FD summary</h3>
+          <dl class="summaryList" id="maturitySummary">
+            <dt>Principal amount</dt><dd id="sPrincipal">—</dd>
+            <dt>Interest Rate</dt><dd id="sRate">—</dd>
+            <dt>Tenure</dt><dd id="sTenure">—</dd>
+            <dt>Bank Name</dt><dd id="sBank">—</dd>
+            <dt>Invested on</dt><dd id="sInvested">—</dd>
+            <dt>Maturity Amount</dt><dd id="sMaturity">—</dd>
+          </dl>
+
+          <h3 style="margin-top:6px">FD Withdrawal summary</h3>
+          <dl class="summaryList" id="withdrawSummary">
+            <dt>Principal amount</dt><dd id="wPrincipal">—</dd>
+            <dt>With interest</dt><dd id="wWithInterest">—</dd>
+            <dt>Effective interest rate</dt><dd id="wEffective">—</dd>
+            <dt>Breaking charges</dt><dd id="wCharges">—</dd>
+            <dt>Amount at withdrawal</dt><dd id="wAmount">—</dd>
+          </dl>
+
+          <div class="note" id="policyNote">Note: Bank policies are examples; replace with real rules.</div>
+
+          <div class="actions">
+            <button id="editBtn" class="secondary">Edit</button>
+            <button id="recalcBtn" class="btn">Recalculate</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+<script>
+/* Setup years dropdown (past 10 years) */
+(function fillYears(){
+  const sel = document.getElementById('investYear');
+  const now = new Date();
+  for (let y = now.getFullYear(); y >= now.getFullYear() - 10; y--){
+    const o = document.createElement('option'); o.value = String(y); o.text = String(y);
+    sel.appendChild(o);
+  }
+})();
+
+/* Chart.js donut */
+const ctx = document.getElementById('donut').getContext('2d');
+const donut = new Chart(ctx, {
+  type: 'doughnut',
+  data: { labels:['Principal','Interest','Penalty'], datasets:[{ data:[1,0,0], backgroundColor:['#e8e8e8','#0f1722','#ff4d4f'], borderWidth:0 }]},
+  options: { maintainAspectRatio:false, cutout:'64%', plugins:{ legend:{ position:'bottom'} } }
+});
+
+/* bank policies */
+const bankPolicies = {
+  standard: { penaltyPercent: 1, minMonthsForInterest: 0 },
+  conservative: { penaltyPercent: 0.5, minMonthsForInterest: 3 },
+  generous: { penaltyPercent: 0.2, minMonthsForInterest: 0 }
+};
+
+/* helpers */
+function fmt(v){ return Number(v).toLocaleString('en-IN',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+function showEl(id){ document.getElementById(id).classList.remove('hidden'); }
+function hideEl(id){ document.getElementById(id).classList.add('hidden'); }
+
+/* DOM refs */
+const calcBtn = document.getElementById('calcBtn');
+const editBtn = document.getElementById('editBtn');
+const recalcBtn = document.getElementById('recalcBtn');
+const formPane = document.getElementById('formPane');
+const resultPane = document.getElementById('resultPane');
+
+const principalEl = document.getElementById('principal');
+const rateEl = document.getElementById('rate');
+const timeEl = document.getElementById('time');
+const freqEl = document.getElementById('freq');
+const bankEl = document.getElementById('bank');
+const investMonthEl = document.getElementById('investMonth');
+const investYearEl = document.getElementById('investYear');
+
+const errPrincipal = document.getElementById('errPrincipal');
+const errRate = document.getElementById('errRate');
+const errTime = document.getElementById('errTime');
+const errBank = document.getElementById('errBank');
+const errInv = document.getElementById('errInv');
+
+const sPrincipal = document.getElementById('sPrincipal');
+const sRate = document.getElementById('sRate');
+const sTenure = document.getElementById('sTenure');
+const sBank = document.getElementById('sBank');
+const sInvested = document.getElementById('sInvested');
+const sMaturity = document.getElementById('sMaturity');
+
+const wPrincipal = document.getElementById('wPrincipal');
+const wWithInterest = document.getElementById('wWithInterest');
+const wEffective = document.getElementById('wEffective');
+const wCharges = document.getElementById('wCharges');
+const wAmount = document.getElementById('wAmount');
+const centerGain = document.getElementById('centerGain');
+const policyNote = document.getElementById('policyNote');
+
+const freqWrap = document.getElementById('freqWrap');
+
+/* toggle compounding UI */
+document.querySelectorAll('input[name="itype"]').forEach(r => r.addEventListener('change', () => {
+  if (document.querySelector('input[name="itype"]:checked').value === 'compound') freqWrap.style.display = 'block';
+  else freqWrap.style.display = 'none';
+}));
+
+/* validation */
+function clearErrors(){
+  [errPrincipal, errRate, errTime, errBank, errInv].forEach(e => e.style.display='none');
+}
+function validateInputs(){
+  clearErrors();
+  let ok = true;
+  if (!principalEl.value || Number(principalEl.value) <= 0){ errPrincipal.style.display='block'; ok = false; }
+  if (!rateEl.value || Number(rateEl.value) < 0){ errRate.style.display='block'; ok = false; }
+  if (!timeEl.value || Number(timeEl.value) <= 0){ errTime.style.display='block'; ok = false; }
+  if (!bankEl.value){ errBank.style.display='block'; ok=false; }
+  if (!investMonthEl.value || !investYearEl.value){ errInv.style.display='block'; ok=false; }
+  return ok;
+}
+
+/* compound calc */
+function compoundAmount(P, r, n, t){ return P * Math.pow(1 + r/n, n*t); }
+
+/* core calculate & show result */
+function calculateAndShow(){
+  if (!validateInputs()) return;
+
+  const P = Number(principalEl.value);
+  const rPct = Number(rateEl.value);
+  const r = rPct / 100;
+  const tenure = Number(timeEl.value); // years
+  const bankKey = bankEl.value;
+  const policy = bankPolicies[bankKey];
+
+  const im = Number(investMonthEl.value);
+  const iy = Number(investYearEl.value);
+  const invested = new Date(iy, im-1, 1);
+  const now = new Date();
+
+  let monthsElapsed = (now.getFullYear() - invested.getFullYear())*12 + (now.getMonth() - invested.getMonth());
+  if (monthsElapsed < 0) monthsElapsed = 0;
+  const elapsedYears = monthsElapsed / 12;
+
+  const itype = document.querySelector('input[name="itype"]:checked').value;
+
+  // maturity
+  let maturityAmount, interestFull;
+  if (itype === 'compound'){
+    const n = Number(freqEl.value);
+    maturityAmount = compoundAmount(P, r, n, tenure);
+    interestFull = maturityAmount - P;
+  } else {
+    interestFull = P * r * tenure;
+    maturityAmount = P + interestFull;
+  }
+
+  // interest held so far
+  let interestHeld;
+  if (itype === 'compound'){
+    const n = Number(freqEl.value);
+    const Aheld = compoundAmount(P, r, n, elapsedYears);
+    interestHeld = Aheld - P;
+  } else {
+    interestHeld = P * r * elapsedYears;
+  }
+
+  // early withdrawal logic
+  const tenureMonths = Math.round(tenure * 12);
+  const matured = monthsElapsed >= tenureMonths;
+  let interestPaid = interestHeld;
+  let penalty = 0;
+  let note = '';
+
+  if (matured){
+    interestPaid = interestFull;
+    penalty = 0;
+    note = 'Matured — no breaking charges applied.';
+  } else {
+    if (policy.minMonthsForInterest && monthsElapsed < policy.minMonthsForInterest){
+      interestPaid = 0;
+      penalty = 0;
+      note = `Policy: No interest if held under ${policy.minMonthsForInterest} months.`;
+    } else {
+      penalty = interestHeld * (policy.penaltyPercent / 100);
+      note = `Policy: Penalty = ${policy.penaltyPercent}% of interest earned.`;
+    }
+  }
+
+  const payableNow = Math.max(0, P + interestPaid - penalty);
+  const effectiveRate = elapsedYears > 0 ? (interestPaid / P) / elapsedYears * 100 : 0;
+  const gainPct = P > 0 ? Math.round((interestPaid / P)*1000)/10 : 0;
+
+  // update summary fields
+  sPrincipal.textContent = `₹${fmt(P)}`;
+  sRate.textContent = `${rPct}%`;
+  sTenure.textContent = `${Math.floor(tenure)} years ${Math.round((tenure%1)*12)} months`;
+  sBank.textContent = bankEl.options[bankEl.selectedIndex]?.text || '';
+  sInvested.textContent = invested.toISOString().slice(0,10);
+  sMaturity.textContent = `₹${fmt(maturityAmount)}`;
+
+  wPrincipal.textContent = `₹${fmt(P)}`;
+  wWithInterest.textContent = `₹${fmt(P + interestPaid)}`;
+  wEffective.textContent = `${fmt(effectiveRate)}%`;
+  wCharges.textContent = `₹${fmt(penalty)}`;
+  wAmount.textContent = `₹${fmt(payableNow)}`;
+
+  centerGain.textContent = `${gainPct}%`;
+  policyNote.textContent = note + ` You held the deposit for ${monthsElapsed} month(s).`;
+
+  // update donut
+  donut.data.datasets[0].data = [P, interestPaid, penalty];
+  donut.update();
+
+  // show results pane, hide form
+  hideEl('formPane');
+  showEl('resultPane');
+  // smooth focus
+  setTimeout(()=> resultPane.scrollIntoView({behavior:'smooth', block:'center'}), 120);
+}
+
+/* wire buttons */
+calcBtn.addEventListener('click', calculateAndShow);
+recalcBtn.addEventListener('click', calculateAndShow);
+editBtn.addEventListener('click', ()=>{ hideEl('resultPane'); showEl('formPane'); window.scrollTo({top:0, behavior:'smooth'}); });
+
+/* Enter key on inputs triggers calculate */
+[principalEl, rateEl, timeEl, investMonthEl, investYearEl, bankEl].forEach(el => {
+  el.addEventListener('keydown', e => { if (e.key === 'Enter') calculateAndShow(); });
+});
+
+/* defaults */
+(function defaults(){
+  principalEl.value = '10000';
+  rateEl.value = '8';
+  timeEl.value = '2';
+  bankEl.value = 'standard';
+  const now = new Date(); investMonthEl.value = String(now.getMonth()+1); investYearEl.value = String(now.getFullYear());
+  // initial state: form shown, results hidden (do not auto-calc)
+})();
+</script>
+</body>
+</html>

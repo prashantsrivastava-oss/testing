@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Portfolio Donut Chart (Black-Grey Gradient) — Fixed</title>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root{ --bg:#f7fafc; --card:#ffffff; --muted:#6b7280; --accent:#0ea5a4 }
+    body{
+      font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,Arial;
+      background:var(--bg); margin:0; padding:20px; color:#0f172a;
+      /* allow normal page flow */
+    }
+    .container{max-width:820px; margin:0 auto}
+    .card{background:var(--card); border-radius:12px; padding:18px; box-shadow:0 6px 20px rgba(2,6,23,0.06); margin-bottom:16px}
+    .grid{display:grid; grid-template-columns:repeat(2,1fr); gap:12px}
+    label{display:block; font-size:13px; color:var(--muted); margin-bottom:6px}
+    input[type=number]{width:100%; padding:8px 10px; border-radius:8px; border:1px solid #e6eef2; font-size:14px}
+    .controls{display:flex; gap:8px; margin-top:12px}
+    button{padding:8px 12px; border-radius:8px; border:0; cursor:pointer; font-weight:600}
+    .btn-primary{background:var(--accent); color:white}
+    .btn-ghost{background:transparent; border:1px solid #e6eef2}
+    /* give the canvas an explicit drawing size */
+    #portfolioDonut { display:block; margin:0 auto; max-width:100%; width:700px; height:420px; }
+    .error { color:#b91c1c; font-weight:700; margin-top:12px; }
+    @media (max-width:820px){ #portfolioDonut{ width:100%; height:360px } .grid{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Portfolio Donut Calculator (Donut Only)</h1>
+      <div class="grid">
+        <div>
+          <label>Current Portfolio Investment (₹)</label>
+          <input type="number" id="currentPortfolio" value="100000" />
+        </div>
+        <div>
+          <label>Monthly EMI (₹)</label>
+          <input type="number" id="emi" value="5000" />
+        </div>
+        <div>
+          <label>Monthly Insurance (₹)</label>
+          <input type="number" id="insurance" value="2000" />
+        </div>
+        <div>
+          <label>Fixed Monthly Expenses (₹)</label>
+          <input type="number" id="fixedExpenses" value="20000" />
+        </div>
+        <div>
+          <label>Other Monthly Factors (₹)</label>
+          <input type="number" id="otherFactors" value="1000" />
+        </div>
+        <div>
+          <label>Emergency Fund (months of expenses)</label>
+          <input type="number" id="emergencyMonths" value="6" />
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn-primary" id="calculate">Calculate</button>
+        <button class="btn-ghost" id="reset">Reset</button>
+      </div>
+
+      <div id="loadError" class="error" style="display:none"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 8px">Portfolio Donut Chart</h2>
+      <!-- explicit width/height help Chart.js render consistently -->
+      <canvas id="portfolioDonut" width="700" height="420"></canvas>
+    </div>
+  </div>
+
+<script>
+(function(){
+  // small helpers
+  function getNum(id){ const v = parseFloat(document.getElementById(id).value); return isNaN(v)?0:v; }
+  function showError(msg){ const e=document.getElementById('loadError'); e.style.display='block'; e.textContent = msg; }
+
+  // wait for DOM
+  window.addEventListener('DOMContentLoaded', () => {
+    // ensure Chart is loaded
+    if(typeof Chart === 'undefined'){
+      showError('Chart.js did not load. Check your network or CDN access.');
+      return;
+    }
+
+    let donutChart = null;
+
+    function calculate(){
+      document.getElementById('loadError').style.display = 'none';
+
+      const currentPortfolio = getNum('currentPortfolio');
+      const emi = getNum('emi');
+      const insurance = getNum('insurance');
+      const fixedExpenses = getNum('fixedExpenses');
+      const otherFactors = getNum('otherFactors');
+      const emergencyMonths = getNum('emergencyMonths');
+
+      const monthlyOutflow = fixedExpenses + insurance + emi + otherFactors;
+      const emergencyTarget = monthlyOutflow * emergencyMonths;
+      const outstandingEmiYear = emi * 12;
+      const insuranceYear = insurance * 12;
+
+      const labels = ['Current Portfolio','Emergency Fund Target','Outstanding EMI (1 yr)','Insurance (1 yr)','Fixed Expenses (1 mo)','Other (1 mo)'];
+      const vals = [currentPortfolio, emergencyTarget, outstandingEmiYear, insuranceYear, fixedExpenses, otherFactors];
+
+      // get canvas context AFTER sizes are set
+      const canvas = document.getElementById('portfolioDonut');
+      if(!canvas) { showError('Canvas element not found'); return; }
+      const ctx = canvas.getContext('2d');
+
+      // Destroy previous chart safely
+      try{ if(donutChart) donutChart.destroy(); } catch(e){ console.warn('destroy error', e); }
+
+      // Create distinct black->grey gradients for slices (vertical gradient matches canvas height)
+      const gradients = vals.map((v,i) => {
+        const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        // vary the darkness slightly per slice for subtle distinction
+        const light = Math.max(40, 60 - i*5); // percent-like for grey
+        g.addColorStop(0, `rgba(0,0,0,1)`);            // top black
+        g.addColorStop(1, `rgba(${light},${light},${light},1)`); // bottom grey-ish
+        return g;
+      });
+
+      // Create chart
+      try {
+        donutChart = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: vals,
+              backgroundColor: gradients,
+              borderColor: '#fff',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            plugins: {
+              legend: { position: 'bottom' },
+              tooltip: {
+                callbacks: {
+                  label: function(ctx){
+                    const val = ctx.parsed ?? ctx.raw;
+                    const total = ctx.chart._metasets ? ctx.chart._metasets[0].total : ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0);
+                    const pct = total ? (val/total*100).toFixed(2) : '0.00';
+                    return `${ctx.label}: ₹ ${Number(val).toLocaleString('en-IN')} (${pct}%)`;
+                  }
+                }
+              }
+            },
+            maintainAspectRatio: false,
+            cutout: '55%'
+          }
+        });
+      } catch(err){
+        console.error('Chart creation error', err);
+        showError('Failed to create chart: ' + err.message);
+      }
+    }
+
+    document.getElementById('calculate').addEventListener('click', calculate);
+    document.getElementById('reset').addEventListener('click', ()=>{
+      document.querySelectorAll('input[type=number]').forEach(i=> i.value = '');
+      if(donutChart) { try{ donutChart.destroy(); }catch(e){} }
+    });
+
+    // initial render
+    calculate();
+  });
+})();
+</script>
+</body>
+</html>
+

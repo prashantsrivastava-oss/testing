@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Financial Allocation Calculator (INR) — with Risk (Fixed Buttons)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root{ --bg:#f7fafc; --card:#ffffff; --muted:#6b7280; --accent:#0ea5a4 }
+    body{font-family:Inter,ui-sans-serif,system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; background:var(--bg); margin:0; padding:24px; color:#0f172a}
+    .container{max-width:980px; margin:0 auto}
+    .card{background:var(--card); border-radius:12px; padding:18px; box-shadow:0 6px 20px rgba(2,6,23,0.06);}
+    h1{font-size:20px; margin:0 0 12px}
+    .grid{display:grid; grid-template-columns:repeat(2,1fr); gap:12px}
+    label{display:block; font-size:13px; color:var(--muted); margin-bottom:6px}
+    input[type=number]{width:100%; padding:10px 12px; border-radius:8px; border:1px solid #e6eef2; font-size:15px}
+    .controls{display:flex; gap:8px; margin-top:12px}
+    button{padding:10px 14px; border-radius:10px; border:0; cursor:pointer; font-weight:600}
+    .btn-primary{background:var(--accent); color:white}
+    .btn-ghost{background:transparent; border:1px solid #e6eef2}
+    .results{display:flex; gap:12px; margin-top:18px}
+    .result-item{flex:1; background:#f8fafc; padding:12px; border-radius:8px}
+    .small{font-size:13px; color:var(--muted)}
+    canvas{max-width:100%; height:320px}
+    #consoleLog{display:none; color:#b91c1c; font-weight:600}
+    @media (max-width:700px){ .grid{grid-template-columns:1fr} .results{flex-direction:column} }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Financial Allocation Calculator (INR)</h1>
+      <p class="small">Enter amounts for each asset class (in rupees). Zero or empty fields will be ignored in the chart.</p>
+
+      <div class="grid" id="inputs">
+        <div>
+          <label>Fixed Deposit (FD)</label>
+          <input type="number" min="0" step="0.01" id="fd" placeholder="e.g. 100000" />
+        </div>
+        <div>
+          <label>Bonds</label>
+          <input type="number" min="0" step="0.01" id="bonds" placeholder="e.g. 50000" />
+        </div>
+        <div>
+          <label>Alternative Assets</label>
+          <input type="number" min="0" step="0.01" id="alts" placeholder="e.g. 20000" />
+        </div>
+        <div>
+          <label>Stocks (Equity)</label>
+          <input type="number" min="0" step="0.01" id="stocks" placeholder="e.g. 150000" />
+        </div>
+        <div>
+          <label>Real Estate</label>
+          <input type="number" min="0" step="0.01" id="realestate" placeholder="e.g. 500000" />
+        </div>
+        <div>
+          <label>Cash</label>
+          <input type="number" min="0" step="0.01" id="cash" placeholder="e.g. 25000" />
+        </div>
+        <div>
+          <label>Pre-IPO</label>
+          <input type="number" min="0" step="0.01" id="preipo" placeholder="e.g. 0" />
+        </div>
+        <div>
+          <label>Gold</label>
+          <input type="number" min="0" step="0.01" id="gold" placeholder="e.g. 40000" />
+        </div>
+        <div>
+          <label>Mutual Funds</label>
+          <input type="number" min="0" step="0.01" id="mf" placeholder="e.g. 120000" />
+        </div>
+      </div>
+
+      <div class="controls">
+        <button type="button" class="btn-primary" id="calc">Update Chart</button>
+        <button type="button" class="btn-primary" id="calcRisk">Calculate Risk</button>
+        <button type="button" class="btn-ghost" id="reset">Reset</button>
+        <button type="button" class="btn-ghost" id="export">Export CSV</button>
+      </div>
+
+      <div id="consoleLog" class="small" role="status"></div>
+
+      <div class="results">
+        <div class="result-item">
+          <div class="small">Total Portfolio (INR)</div>
+          <div id="total" style="font-size:22px; font-weight:700">0</div>
+        </div>
+        <div class="result-item">
+          <div class="small">Largest Allocation</div>
+          <div id="largest" style="font-size:20px; font-weight:700">—</div>
+        </div>
+        <div class="result-item">
+          <div class="small">Smallest Allocation (non-zero)</div>
+          <div id="smallest" style="font-size:20px; font-weight:700">—</div>
+        </div>
+      </div>
+
+      <div style="margin-top:18px" class="card">
+        <canvas id="allocChart"></canvas>
+      </div>
+
+      <div style="margin-top:14px" class="card">
+        <h2 style="margin:0 0 8px">Risk Assessment</h2>
+        <p class="small">Click <strong>Calculate Risk</strong> to get a simple risk score based on your current allocations. This is a heuristic score (0–100) using typical risk weights per asset class.</p>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px">
+          <div style="flex:1; min-width:220px; background:#fff; padding:12px; border-radius:8px">
+            <div class="small">Risk Score</div>
+            <div id="riskScore" style="font-size:28px; font-weight:800">—</div>
+          </div>
+          <div style="flex:2; min-width:220px; background:#fff; padding:12px; border-radius:8px">
+            <div class="small">Risk Classification</div>
+            <div id="riskClass" style="font-size:20px; font-weight:700">—</div>
+            <div id="riskAdvice" class="small" style="margin-top:8px">—</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // Wrap everything to ensure DOM is ready and to avoid errors stopping listener attachment
+    window.addEventListener('DOMContentLoaded', () => {
+      const consoleLog = document.getElementById('consoleLog');
+      function showError(msg){ consoleLog.style.display = 'block'; consoleLog.textContent = 'Error: ' + msg; }
+      function clearError(){ consoleLog.style.display = 'none'; consoleLog.textContent = ''; }
+
+      try{
+        const fields = [
+          {id:'fd', label:'FD', weight:1},
+          {id:'bonds', label:'Bonds', weight:2},
+          {id:'alts', label:'Alt Assets', weight:7},
+          {id:'stocks', label:'Stocks', weight:9},
+          {id:'realestate', label:'Real Estate', weight:6},
+          {id:'cash', label:'Cash', weight:1},
+          {id:'preipo', label:'Pre-IPO', weight:10},
+          {id:'gold', label:'Gold', weight:3},
+          {id:'mf', label:'Mutual Funds', weight:7}
+        ];
+
+        // safe chart creation
+        let chart = null;
+        try{
+          if(typeof Chart === 'undefined') throw new Error('Chart.js not loaded');
+          const ctxEl = document.getElementById('allocChart');
+          if(!ctxEl) throw new Error('Chart canvas not found');
+          const ctx = ctxEl.getContext('2d');
+          chart = new Chart(ctx, { type: 'doughnut', data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] }, options: { plugins: { legend: { position: 'right' }}, maintainAspectRatio:false } });
+        }catch(e){
+          console.warn('Chart init failed:', e);
+          showError(e.message + ' — chart will be disabled but buttons will still work.');
+        }
+
+        function currency(x){ return Number(x).toLocaleString('en-IN', {maximumFractionDigits:2}); }
+
+        function gather(){
+          const out = [];
+          for(const f of fields){
+            const el = document.getElementById(f.id);
+            const val = el ? parseFloat(el.value || 0) : 0;
+            out.push({id:f.id, label:f.label, value: isNaN(val) ? 0 : val, weight:f.weight});
+          }
+          return out;
+        }
+
+        function update(){
+          clearError();
+          const data = gather();
+          const nonZero = data.filter(d=>d.value>0);
+          const total = data.reduce((s,d)=>s+d.value,0);
+          document.getElementById('total').textContent = total>0 ? '₹ ' + currency(total) : '₹ 0';
+
+          if(nonZero.length===0){
+            document.getElementById('largest').textContent = '—';
+            document.getElementById('smallest').textContent = '—';
+          } else {
+            const sorted = [...nonZero].sort((a,b)=>b.value-a.value);
+            document.getElementById('largest').textContent = `${sorted[0].label} — ₹ ${currency(sorted[0].value)} (${((sorted[0].value/total)*100).toFixed(2)}%)`;
+            const smallest = sorted[sorted.length-1];
+            document.getElementById('smallest').textContent = `${smallest.label} — ₹ ${currency(smallest.value)} (${((smallest.value/total)*100).toFixed(2)}%)`;
+          }
+
+          if(chart){
+            chart.data.labels = nonZero.map(d=>d.label + ' — ₹' + currency(d.value));
+            chart.data.datasets[0].data = nonZero.map(d=>d.value);
+            chart.data.datasets[0].backgroundColor = nonZero.map((_,i)=>`hsl(${(i*47)%360} 70% 55%)`);
+            chart.update();
+          }
+        }
+
+        // Risk calculation
+        function calculateRisk(){
+          clearError();
+          const data = gather();
+          const total = data.reduce((s,d)=>s+d.value,0);
+          if(total<=0){
+            document.getElementById('riskScore').textContent = '—';
+            document.getElementById('riskClass').textContent = 'No assets entered';
+            document.getElementById('riskAdvice').textContent = 'Please enter amounts to calculate risk.';
+            return;
+          }
+
+          let weightedSum = 0;
+          for(const d of data){ weightedSum += d.value * d.weight; }
+          const weightedAvg = weightedSum / total;
+          const score = Math.round((weightedAvg / 10) * 100);
+
+          let cls = '', advice = '';
+          if(score < 30){ cls = 'Conservative'; advice = 'Portfolio leans conservative. Consider small equity exposure for growth if your horizon is long.'; }
+          else if(score < 60){ cls = 'Balanced'; advice = 'Balanced mix — reasonable balance between growth and safety. Monitor concentration in single assets.'; }
+          else { cls = 'Growth / Aggressive'; advice = 'Higher risk exposure. Ensure you have adequate diversification and an emergency cash buffer.'; }
+
+          document.getElementById('riskScore').textContent = score + ' / 100';
+          document.getElementById('riskClass').textContent = cls;
+          document.getElementById('riskAdvice').textContent = advice + ' (Weighted average risk: ' + weightedAvg.toFixed(2) + ' on a 1–10 scale)';
+
+          const contributors = data.map(d=>({label:d.label, contrib:d.value * d.weight})).sort((a,b)=>b.contrib - a.contrib).slice(0,3);
+          const contribText = 'Top risk contributors: ' + contributors.map(c=>`${c.label}`).join(', ') + '.';
+          const advEl = document.getElementById('riskAdvice');
+          advEl.textContent = advEl.textContent + ' ' + contribText;
+        }
+
+        // Attach listeners safely and prevent default
+        const btnCalc = document.getElementById('calc');
+        const btnRisk = document.getElementById('calcRisk');
+        const btnReset = document.getElementById('reset');
+        const btnExport = document.getElementById('export');
+
+        if(btnCalc) btnCalc.addEventListener('click', (e)=>{ e.preventDefault(); update(); });
+        if(btnRisk) btnRisk.addEventListener('click', (e)=>{ e.preventDefault(); update(); calculateRisk(); });
+        if(btnReset) btnReset.addEventListener('click', (e)=>{ e.preventDefault(); for(const f of fields){ const el = document.getElementById(f.id); if(el) el.value = ''; } update(); document.getElementById('riskScore').textContent = '—'; document.getElementById('riskClass').textContent = '—'; document.getElementById('riskAdvice').textContent = '—'; clearError(); });
+        if(btnExport) btnExport.addEventListener('click', (e)=>{ e.preventDefault(); const data = gather(); const rows = [['Asset','Amount INR']]; for(const d of data) rows.push([d.label, d.value]); const csv = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('
+'); const blob = new Blob([csv], {type:'text/csv'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'allocation_inr.csv'; a.click(); URL.revokeObjectURL(url); });
+
+        // initial render
+        update();
+      }catch(err){
+        console.error(err);
+        const consoleLog = document.getElementById('consoleLog');
+        if(consoleLog){ consoleLog.style.display = 'block'; consoleLog.textContent = 'Fatal error: ' + err.message; }
+      }
+    });
+  </script>
+</body>
+</html>

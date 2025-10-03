@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SIP — Simple Donut Chart</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root{ --bg:#f7fafc; --muted:#6b7280; }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);font-family:Inter,system-ui,Arial}
+  .page{display:flex;align-items:center;justify-content:center;height:100%;padding:28px}
+  .card{width:460px;background:#fff;border-radius:14px;padding:20px 22px;box-shadow:0 16px 40px rgba(12,24,48,0.08)}
+  h1{margin:0 0 6px;font-size:18px}
+  .muted{color:var(--muted);font-size:13px;margin-bottom:12px}
+  label{display:block;font-weight:700;color:#374151;margin-top:10px;font-size:13px}
+  .input{width:100%;padding:10px 12px;margin-top:8px;border-radius:10px;border:1px solid #e5e7eb;background:#fff;font-size:14px}
+  .row{display:flex;gap:10px;align-items:center}
+  .small{width:110px}
+  .btn{margin-top:14px;width:100%;padding:12px;border-radius:12px;border:0;cursor:pointer;color:#fff;font-weight:800;background:linear-gradient(135deg,#3b82f6,#8b5cf6 50%);box-shadow:0 10px 28px rgba(59,130,246,0.14)}
+  .chartWrap{margin-top:18px;display:flex;flex-direction:column;align-items:center}
+  .donutBox{width:300px;height:300px;position:relative}
+  canvas{width:100% !important;height:100% !important;display:block}
+  .centerText{position:absolute;left:0;top:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:3;pointer-events:none}
+  .centerText .percent{font-size:34px;font-weight:800;color:#14908b}
+  .centerText .label{font-size:12px;color:var(--muted);margin-top:6px}
+  .results{margin-top:12px;display:flex;justify-content:space-between;font-weight:800;color:#0b1220;width:100%}
+  .legend{margin-top:8px;font-size:12px;color:var(--muted);text-align:center;width:100%}
+  #err{color:#dc2626;font-size:13px;margin-top:8px;display:none}
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="card" role="main" aria-label="SIP calculator: simple donut">
+      <h1>Value SIP Calculator</h1>
+      <div class="muted">Monthly SIP (deposits at month end). Monthly compounding assumed.</div>
+
+      <label for="sip">Monthly SIP (₹)</label>
+      <input id="sip" class="input" type="number" min="0" step="1" value="5000">
+
+      <div class="row" style="margin-top:6px">
+        <div style="flex:1">
+          <label for="rate">Expected return (%)</label>
+          <input id="rate" class="input" type="number" step="0.01" min="0" value="7.5">
+        </div>
+        <div style="width:120px">
+          <label for="years">Tenure (yrs)</label>
+          <input id="years" class="input small" type="number" step="1" min="1" value="5">
+        </div>
+      </div>
+
+      <div id="err">Please enter valid positive values.</div>
+      <button id="calcBtn" class="btn">Calculate</button>
+
+      <div class="chartWrap">
+        <div class="donutBox">
+          <canvas id="donut"></canvas>
+          <div class="centerText">
+            <div class="percent" id="centerPercent">0%</div>
+            <div class="label">gain</div>
+          </div>
+        </div>
+
+        <div class="results">
+          <div>Maturity:</div>
+          <div id="maturity">—</div>
+        </div>
+        <div class="results" style="margin-top:6px">
+          <div>Interest:</div>
+          <div id="interest">—</div>
+        </div>
+
+        <div class="legend">Black = Interest earned · Grey = Principal</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+function fmtINR(v){ return '₹' + Number(v).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function round2(v){ return Math.round(v*100)/100; }
+
+const sipEl=document.getElementById('sip');
+const rateEl=document.getElementById('rate');
+const yearsEl=document.getElementById('years');
+const calcBtn=document.getElementById('calcBtn');
+const errEl=document.getElementById('err');
+const centerPercent=document.getElementById('centerPercent');
+const maturityEl=document.getElementById('maturity');
+const interestEl=document.getElementById('interest');
+
+const ctx=document.getElementById('donut').getContext('2d');
+
+let lastPrincipal=0,lastInterest=0;
+
+const donut=new Chart(ctx,{
+  type:'doughnut',
+  data:{
+    labels:['Interest','Principal'],
+    datasets:[{
+      data:[0,0],
+      backgroundColor:['#000000','#cccccc'],
+      borderWidth:0,
+      cutout:'60%'
+    }]
+  },
+  options:{
+    plugins:{
+      legend:{display:false},
+      tooltip:{
+        callbacks:{
+          label:function(ctx){
+            return `${ctx.label}: ${fmtINR(ctx.parsed)}`;
+          }
+        }
+      }
+    }
+  }
+});
+
+function simulateSIP(monthly, annualRatePct, years){
+  const r=annualRatePct/100, monthlyRate=r/12, totalMonths=Math.round(years*12);
+  let balance=0,P=0,I=0;
+  for(let m=1;m<=totalMonths;m++){
+    const int=balance*monthlyRate;
+    balance=round2(balance+int);
+    I+=int;
+    balance=round2(balance+monthly);
+    P+=monthly;
+  }
+  return {maturity:round2(balance),principal:round2(P),interest:round2(I)};
+}
+
+function updateUI(principal,interest){
+  lastPrincipal=principal; lastInterest=interest;
+  const gain=principal>0?Math.round((interest/principal)*1000)/10:0;
+  centerPercent.textContent=gain+'%';
+  maturityEl.textContent=fmtINR(principal+interest);
+  interestEl.textContent=fmtINR(interest);
+
+  donut.data.datasets[0].data=[interest,principal];
+  donut.update();
+}
+
+function validateInputs(){
+  const s=+sipEl.value,r=+rateEl.value,y=+yearsEl.value;
+  if(s<=0||r<0||y<=0){errEl.style.display='block';return false;}
+  errEl.style.display='none';return true;
+}
+
+calcBtn.addEventListener('click',()=>{
+  if(!validateInputs())return;
+  const s=+sipEl.value,r=+rateEl.value,y=+yearsEl.value;
+  const res=simulateSIP(s,r,y);updateUI(res.principal,res.interest);
+});
+
+[sipEl,rateEl,yearsEl].forEach(el=>el.addEventListener('keydown',e=>{if(e.key==='Enter')calcBtn.click();}));
+
+// Initial
+const initial=simulateSIP(+sipEl.value,+rateEl.value,+yearsEl.value);
+updateUI(initial.principal,initial.interest);
+</script>
+</body>
+</html>

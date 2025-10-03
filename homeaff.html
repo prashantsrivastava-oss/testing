@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Home Affordability Calculator</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#f6f9fc; --card:#fff; --accent1:#3b82f6; --accent2:#8b5cf6; --muted:#6b7280;
+    --radius:12px;
+  }
+  body{margin:0;font-family:Inter,system-ui,Arial;background:var(--bg);color:#0b1220}
+  .wrap{max-width:780px;margin:32px auto;padding:18px}
+  .card{background:var(--card);border-radius:var(--radius);padding:20px;box-shadow:0 10px 30px rgba(12,24,48,0.06)}
+  h1{margin:0 0 8px;font-size:22px}
+  .muted{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  label{display:block;font-weight:600;font-size:13px;margin-bottom:6px}
+  input{width:100%;padding:10px;border-radius:8px;border:1px solid #e6e8eb;font-size:14px}
+  .btn{margin-top:14px;padding:10px 14px;border-radius:10px;border:0;font-weight:700;cursor:pointer;
+       background:linear-gradient(135deg,var(--accent1),var(--accent2));color:#fff}
+  .result{margin-top:18px;text-align:center}
+  .big{font-weight:800;font-size:20px;margin:6px 0}
+  .chartWrap{max-width:320px;margin:20px auto;position:relative}
+  canvas{width:100%!important;height:100%!important;display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Home Affordability Calculator</h1>
+    <div class="muted">Estimate how much home you can afford based on your income, expenses, and loan assumptions.</div>
+
+    <div class="grid">
+      <div>
+        <label for="income">Monthly Income (₹)</label>
+        <input id="income" type="number" value="100000">
+      </div>
+      <div>
+        <label for="expenses">Fixed Monthly Expenses (₹)</label>
+        <input id="expenses" type="number" value="30000">
+      </div>
+      <div>
+        <label for="emi">Existing Loan EMI (₹)</label>
+        <input id="emi" type="number" value="10000">
+      </div>
+      <div>
+        <label for="rate">Expected Home Loan Rate (%)</label>
+        <input id="rate" type="number" value="8">
+      </div>
+      <div>
+        <label for="tenure">Loan Tenure (years)</label>
+        <input id="tenure" type="number" value="20">
+      </div>
+      <div>
+        <label for="ratio">Max EMI-to-Income Ratio (%)</label>
+        <input id="ratio" type="number" value="40">
+      </div>
+    </div>
+
+    <button id="calcBtn" class="btn">Calculate</button>
+
+    <div class="result">
+      <div class="muted">You can afford a home worth approx</div>
+      <div id="homeVal" class="big">—</div>
+      <div class="muted">based on your inputs</div>
+    </div>
+
+    <div class="chartWrap">
+      <canvas id="affordChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('affordChart');
+let chart = null;
+
+function makeGradients(n, ctx){
+  const h = canvas.height;
+  const grads = [];
+  for (let i=0;i<n;i++){
+    const t = i / Math.max(1,n-1);
+    const start = 220 - t*20;  // light grey range
+    const end = 180 - t*20;
+    const g = ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0, `rgb(${start},${start},${start})`);
+    g.addColorStop(1, `rgb(${end},${end},${end})`);
+    grads.push(g);
+  }
+  return grads;
+}
+
+// EMI formula
+function computeEMI(principal, rate, years){
+  const r = rate/12/100;
+  const n = years*12;
+  return principal * r * Math.pow(1+r,n) / (Math.pow(1+r,n)-1);
+}
+
+function calculate(){
+  const income = Number(document.getElementById('income').value)||0;
+  const expenses = Number(document.getElementById('expenses').value)||0;
+  const emiExisting = Number(document.getElementById('emi').value)||0;
+  const rate = Number(document.getElementById('rate').value)||0;
+  const tenure = Number(document.getElementById('tenure').value)||0;
+  const ratio = Number(document.getElementById('ratio').value)||0;
+
+  if(income<=0||rate<=0||tenure<=0){ 
+    document.getElementById('homeVal').textContent="Enter valid numbers"; 
+    return; 
+  }
+
+  // allowable EMI
+  const maxEmiAllowed = (income*ratio/100) - expenses - emiExisting;
+  if(maxEmiAllowed<=0){ 
+    document.getElementById('homeVal').textContent="Not affordable"; 
+    return; 
+  }
+
+  // reverse EMI formula to get principal
+  const r = rate/12/100;
+  const n = tenure*12;
+  const principal = maxEmiAllowed * (Math.pow(1+r,n)-1) / (r * Math.pow(1+r,n));
+
+  document.getElementById('homeVal').textContent = "₹" + Math.round(principal).toLocaleString();
+
+  // chart breakdown: Expenses, Existing EMI, Affordable EMI, Savings
+  const savings = income - expenses - emiExisting - maxEmiAllowed;
+  const breakdown = [expenses, emiExisting, maxEmiAllowed, Math.max(0,savings)];
+  const labels = ["Expenses","Existing EMI","Home Loan EMI","Savings"];
+
+  if(chart) chart.destroy();
+  const ctx = canvas.getContext('2d');
+  const grads = makeGradients(breakdown.length,ctx);
+
+  chart = new Chart(ctx,{
+    type:'doughnut',
+    data:{labels,datasets:[{data:breakdown,backgroundColor:grads,cutout:'60%',borderWidth:0}]},
+    options:{plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:c=>`${c.label}: ₹${c.raw.toLocaleString()}`}}}}
+  });
+}
+
+document.getElementById('calcBtn').addEventListener('click',calculate);
+calculate();
+</script>
+</body>
+</html>
+

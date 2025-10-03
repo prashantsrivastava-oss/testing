@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>FD Calculator — Fixed</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: #f4f7fb;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .calculator {
+      background: #fff;
+      padding: 22px 28px;
+      border-radius: 14px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+      width: 420px;
+      max-width: 95%;
+    }
+    h2 { text-align:center; margin-bottom:14px; color:#2b2d42; }
+    label { display:block; margin-bottom:8px; font-weight:600; color:#333; }
+    input, select {
+      width:100%;
+      padding:10px;
+      margin-top:6px;
+      margin-bottom:12px;
+      border:1px solid #d6dbe2;
+      border-radius:8px;
+      font-size:14px;
+    }
+    .row { display:flex; gap:10px; }
+    button {
+      padding:11px 14px;
+      background:#0077b6;
+      color:#fff; border:none; border-radius:8px;
+      font-weight:700; cursor:pointer;
+    }
+    button.secondary {
+      background:#90e0ef; color:#000; font-weight:600;
+    }
+    button:disabled { opacity:0.6; cursor:not-allowed; }
+    #result {
+      margin-top:16px; padding:12px; border-radius:8px;
+      background:#e8f6ff; border-left:5px solid #0077b6; font-weight:700;
+      color:#222;
+    }
+    .error { background:#ffecec; border-left:5px solid #ff4d4f; color:#8a1b1b; font-weight:700; }
+    .chart-toggle { margin-top:12px; text-align:center; }
+    canvas { margin-top:14px; width:100% !important; height:280px !important; }
+  </style>
+</head>
+<body>
+  <div class="calculator" aria-live="polite">
+    <h2>Fixed Deposit Calculator</h2>
+
+    <label for="principal">Deposit Amount (₹)</label>
+    <input id="principal" type="number" placeholder="e.g. 100000" min="0" />
+
+    <label for="rate">Interest Rate (%)</label>
+    <input id="rate" type="number" step="0.01" placeholder="e.g. 7.5" min="0" />
+
+    <label for="time">Tenure (Years)</label>
+    <input id="time" type="number" step="0.25" placeholder="e.g. 5" min="0" />
+
+    <label for="compounding">Compounding</label>
+    <select id="compounding">
+      <option value="1">Yearly</option>
+      <option value="4" selected>Quarterly</option>
+      <option value="12">Monthly</option>
+    </select>
+
+    <div class="row" style="margin-top:8px;">
+      <button id="calcBtn" type="button">Calculate</button>
+      <button id="clearBtn" class="secondary" type="button">Clear</button>
+    </div>
+
+    <div id="result" style="display:none;"></div>
+
+    <div class="chart-toggle">
+      <button id="pieBtn" class="secondary" disabled type="button">Pie Chart</button>
+      <button id="barBtn" class="secondary" disabled type="button">Bar Chart</button>
+    </div>
+
+    <canvas id="fdChart" aria-label="Principal vs Interest chart"></canvas>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // DOM elements (guaranteed to exist because script runs after DOMContentLoaded)
+      const principalInput = document.getElementById('principal');
+      const rateInput = document.getElementById('rate');
+      const timeInput = document.getElementById('time');
+      const compoundingSelect = document.getElementById('compounding');
+
+      const calcBtn = document.getElementById('calcBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const resultDiv = document.getElementById('result');
+      const pieBtn = document.getElementById('pieBtn');
+      const barBtn = document.getElementById('barBtn');
+      const canvas = document.getElementById('fdChart').getContext('2d');
+
+      let chart = null;
+      let chartData = null;
+
+      function showMessage(html, isError = false) {
+        resultDiv.style.display = 'block';
+        resultDiv.className = isError ? 'error' : '';
+        resultDiv.innerHTML = html;
+      }
+
+      function clearMessage() {
+        resultDiv.style.display = 'none';
+        resultDiv.className = '';
+        resultDiv.innerHTML = '';
+      }
+
+      function resetChartButtons() {
+        pieBtn.disabled = true;
+        barBtn.disabled = true;
+      }
+
+      function enableChartButtons() {
+        pieBtn.disabled = false;
+        barBtn.disabled = false;
+      }
+
+      function destroyChartIfExists() {
+        if (chart) {
+          try { chart.destroy(); } catch (e) { /* ignore */ }
+          chart = null;
+        }
+      }
+
+      function formatINR(amount) {
+        // friendly formatting e.g. ₹1,52,451.24
+        return amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 });
+      }
+
+      function calculateFD() {
+        clearMessage();
+        destroyChartIfExists();
+        resetChartButtons();
+
+        // sanitize and convert inputs
+        const P = Number(principalInput.value?.trim());
+        const R = Number(rateInput.value?.trim());
+        const T = Number(timeInput.value?.trim());
+        let n = Number(compoundingSelect.value);
+
+        // validations
+        if (!isFinite(P) || P <= 0) {
+          showMessage('⚠️ Enter a valid Deposit Amount greater than 0.', true);
+          principalInput.focus();
+          return;
+        }
+        if (!isFinite(R) || R <= 0) {
+          showMessage('⚠️ Enter a valid Interest Rate greater than 0.', true);
+          rateInput.focus();
+          return;
+        }
+        if (!isFinite(T) || T <= 0) {
+          showMessage('⚠️ Enter a valid Tenure greater than 0.', true);
+          timeInput.focus();
+          return;
+        }
+        if (!isFinite(n) || n <= 0) { n = 4; } // fallback
+
+        const r = R / 100;
+        const A = P * Math.pow((1 + r / n), n * T);
+        const interest = A - P;
+
+        chartData = { P, interest, maturity: A };
+
+        showMessage(
+          `Maturity Amount: <strong>${formatINR(A)}</strong><br>` +
+          `Interest Earned: <strong>${formatINR(interest)}</strong>`
+        );
+
+        enableChartButtons();
+        drawChart('pie'); // default
+      }
+
+      function drawChart(type) {
+        if (!chartData) return;
+        destroyChartIfExists();
+
+        if (type === 'pie') {
+          chart = new Chart(canvas, {
+            type: 'pie',
+            data: {
+              labels: ['Principal (₹)', 'Interest (₹)'],
+              datasets: [{ data: [chartData.P, chartData.interest], backgroundColor: ['#0077b6', '#90e0ef'] }]
+            },
+            options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+          });
+        } else if (type === 'bar') {
+          chart = new Chart(canvas, {
+            type: 'bar',
+            data: {
+              labels: ['Principal', 'Interest', 'Maturity'],
+              datasets: [{
+                label: 'Amount (₹)',
+                data: [chartData.P, chartData.interest, chartData.maturity],
+                backgroundColor: ['#0077b6', '#90e0ef', '#00b4d8']
+              }]
+            },
+            options: {
+              responsive: true,
+              scales: { y: { beginAtZero: true } },
+              plugins: { legend: { display: false } }
+            }
+          });
+        }
+      }
+
+      // Wire events
+      calcBtn.addEventListener('click', calculateFD);
+      clearBtn.addEventListener('click', () => {
+        principalInput.value = '';
+        rateInput.value = '';
+        timeInput.value = '';
+        compoundingSelect.value = '4';
+        clearMessage();
+        destroyChartIfExists();
+        resetChartButtons();
+      });
+      pieBtn.addEventListener('click', () => drawChart('pie'));
+      barBtn.addEventListener('click', () => drawChart('bar'));
+
+      // initial state
+      resetChartButtons();
+      clearMessage();
+    });
+  </script>
+</body>
+</html>

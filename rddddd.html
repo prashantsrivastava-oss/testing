@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Risk Assessment — 5-question Non-weighted</title>
+
+<!-- Chart.js (v4) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<style>
+  :root{
+    --bg:#f7fafc;
+    --card:#ffffff;
+    --muted:#6b7280;
+    --accent1:#3b82f6;
+    --accent2:#8b5cf6;
+    --btn-grad: linear-gradient(135deg,var(--accent1),var(--accent2) 50%);
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:Inter,system-ui,Arial;color:#0b1220}
+  .wrap{max-width:1050px;margin:28px auto;padding:18px}
+  .card{background:var(--card);border-radius:var(--radius);padding:18px;box-shadow:0 12px 36px rgba(12,24,48,0.07)}
+  h1{margin:0 0 6px;font-size:20px}
+  .muted{color:var(--muted);font-size:13px;margin-bottom:12px}
+
+  .columns{display:grid;grid-template-columns:1fr 420px;gap:20px;align-items:start}
+  .section{margin-bottom:12px}
+  label{display:block;font-weight:700;color:#374151;margin-bottom:6px;font-size:13px}
+  input[type="number"], select, textarea{width:100%;padding:10px;border-radius:10px;border:1px solid #e6e8eb;background:#fff;font-size:14px}
+  .row{display:flex;gap:10px}
+  .small{width:120px;flex:0 0 120px}
+
+  /* question grid */
+  .qgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:6px}
+  .optionBtn{padding:10px 10px;border-radius:8px;border:1px solid #e6e8eb;background:#fff;cursor:pointer;text-align:left;font-size:14px}
+  .optionBtn.active{border-color:transparent; box-shadow:0 8px 20px rgba(59,130,246,0.12); background: linear-gradient(180deg,#f8fbff,#ffffff)}
+
+  .btn{display:inline-block;padding:12px 16px;border-radius:12px;border:0;color:white;font-weight:800;background:var(--btn-grad);cursor:pointer;box-shadow:0 10px 28px rgba(59,130,246,0.14)}
+  .secondary{background:#eef2ff;color:#0b1220;border:0;padding:10px 12px;border-radius:10px;cursor:pointer}
+
+  /* result card */
+  .resultBox{background:linear-gradient(180deg,#fff,#fbfdff);border-radius:10px;padding:12px;margin-bottom:8px;box-shadow:0 8px 18px rgba(12,24,48,0.04)}
+  .profile{font-size:18px;font-weight:800}
+  .score{font-size:28px;font-weight:900;color:#14908b}
+  .smallMuted{font-size:13px;color:var(--muted)}
+
+  /* chart */
+  .chartWrap{display:flex;flex-direction:column;align-items:center}
+  .donut{width:300px;height:300px;position:relative}
+  canvas{width:100% !important;height:100% !important;display:block}
+  .centerText{position:absolute;left:0;top:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+  .centerText .profileSmall{font-weight:800}
+  .centerText .label{font-size:13px;color:var(--muted);margin-top:6px}
+
+  .allocList{margin-top:10px;width:100%}
+  .allocRow{display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #f3f4f6;font-size:14px}
+
+  .breakdown{margin-top:12px;background:#fff;border-radius:10px;padding:10px;box-shadow:0 6px 14px rgba(12,24,48,0.03)}
+  .breakRow{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#374151;border-bottom:1px dashed #f3f4f6}
+  .breakRow small{color:var(--muted);font-size:12px}
+
+  /* simplified card (hidden initially) */
+  .simpleCard{margin-top:12px;background:linear-gradient(180deg,#fff,#fbfdff);border-radius:10px;padding:12px;box-shadow:0 8px 18px rgba(12,24,48,0.04);width:100%}
+  .hidden{display:none}
+
+  .toggleRow{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:12px}
+
+  @media (max-width:980px){
+    .columns{grid-template-columns:1fr}
+    .small{flex:1}
+    .donut{width:220px;height:220px}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" role="main" aria-label="Risk Assessment Calculator (non-weighted)">
+      <h1>Risk Assessment Calculator</h1>
+      <div class="muted">Answer 5 quick questions and click Calculate</div>
+
+      <div class="columns">
+        <!-- LEFT: inputs & questions -->
+        <div>
+          <div class="section">
+            <label for="age">Age</label>
+            <input id="age" type="number" min="18" max="100" value="35" />
+          </div>
+
+          <div class="section">
+            <label for="amount">Investable amount (₹)</label>
+            <input id="amount" type="number" min="0" value="200000" />
+          </div>
+
+          <div class="section">
+            <label for="horizon">Investment horizon</label>
+            <select id="horizon">
+              <option value="1">Under 1 year</option>
+              <option value="3">1-3 years</option>
+              <option value="5">3-5 years</option>
+              <option value="10">5-10 years</option>
+              <option value="15" selected>10+ years</option>
+            </select>
+          </div>
+
+          <!-- 5 questions - each option maps to a numeric value (0..5) -->
+          <div class="section">
+            <label>1) If your portfolio drops 20% in a year, what would you do?</label>
+            <div class="qgrid" data-q="q1">
+              <button class="optionBtn" data-val="0">Sell everything</button>
+              <button class="optionBtn" data-val="1">Sell some</button>
+              <button class="optionBtn" data-val="3">Hold</button>
+              <button class="optionBtn" data-val="5">Buy more</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <label>2) What is your primary financial goal?</label>
+            <div class="qgrid" data-q="q2">
+              <button class="optionBtn" data-val="0">Capital preservation</button>
+              <button class="optionBtn" data-val="2">Income</button>
+              <button class="optionBtn" data-val="4">Wealth growth</button>
+              <button class="optionBtn" data-val="5">Aggressive growth</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <label>3) Investment experience</label>
+            <div class="qgrid" data-q="q3">
+              <button class="optionBtn" data-val="0">None</button>
+              <button class="optionBtn" data-val="2">Limited</button>
+              <button class="optionBtn" data-val="4">Moderate</button>
+              <button class="optionBtn" data-val="5">Extensive</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <label>4) Time horizon tolerance — how long can you stay invested?</label>
+            <div class="qgrid" data-q="q4">
+              <button class="optionBtn" data-val="0">&lt;1 year</button>
+              <button class="optionBtn" data-val="2">1-3 years</button>
+              <button class="optionBtn" data-val="3">3-5 years</button>
+              <button class="optionBtn" data-val="5">5+ years</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <label>5) Reaction to volatility — you prefer:</label>
+            <div class="qgrid" data-q="q5">
+              <button class="optionBtn" data-val="0">Low volatility, low returns</button>
+              <button class="optionBtn" data-val="2">Balanced risk/return</button>
+              <button class="optionBtn" data-val="4">Higher risk for higher returns</button>
+              <button class="optionBtn" data-val="5">Maximum return despite swings</button>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+            <button id="calculateBtn" class="btn">Calculate</button>
+            <button id="resetBtn" class="secondary">Reset</button>
+          </div>
+        </div>
+
+        <!-- RIGHT: results & multi-asset donut -->
+        <div>
+          <div class="resultBox" role="status" aria-live="polite">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div class="smallMuted">Risk score</div>
+                <div class="score" id="scoreVal">—</div>
+              </div>
+              <div style="text-align:right">
+                <div class="profile" id="profileLabel">—</div>
+                <div id="profileDesc" class="smallMuted" style="max-width:220px"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="chartWrap" style="margin-top:10px">
+            <div class="donut" aria-hidden="true">
+              <canvas id="allocDonut" width="400" height="400"></canvas>
+              <div class="centerText">
+                <div class="profileSmall" id="centerProfile">—</div>
+                <div class="label">allocation</div>
+              </div>
+            </div>
+
+            <div class="allocList" id="allocList">
+              <!-- asset rows will be injected here -->
+            </div>
+
+            <!-- Toggle / instructions for simplified chart -->
+            <div class="toggleRow" style="width:100%;margin-top:12px">
+              <div>
+                <div style="font-weight:700">Simplified allocation</div>
+                <div class="smallMuted" id="simpleInstr">View the portfolio broken down into <strong>Fixed Return</strong>, <strong>Volatile</strong> and <strong>Liquid</strong> assets. Click to reveal the simplified donut based on the current allocation.</div>
+              </div>
+              <div style="text-align:right">
+                <button id="toggleSimpleBtn" class="secondary" aria-expanded="false">Show simplified allocation</button>
+              </div>
+            </div>
+
+            <!-- Simplified three-slice donut card (hidden initially) -->
+            <div id="simpleCard" class="simpleCard hidden" aria-hidden="true">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div>
+                  <div style="font-weight:700">Fixed / Volatile / Liquid</div>
+                  <div class="smallMuted">This is a grouped view derived from the detailed allocation.</div>
+                </div>
+                <div style="text-align:right">
+                  <div class="smallMuted">Updated on demand</div>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:12px;align-items:center;margin-top:12px">
+                <div class="donut" style="width:260px;height:260px">
+                  <canvas id="simpleDonut" width="260" height="260"></canvas>
+                  <div class="centerText">
+                    <div class="profileSmall" id="simpleCenter">—</div>
+                    <div class="label">simplified</div>
+                  </div>
+                </div>
+
+                <div style="flex:1">
+                  <div class="allocList" id="simpleAllocList"></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="breakdown" style="margin-top:12px">
+            <div style="font-weight:700;margin-bottom:8px">Score breakdown</div>
+            <div class="breakRow"><div><small>Age factor</small></div><div id="breakAge">—</div></div>
+            <div class="breakRow"><div><small>Horizon factor</small></div><div id="breakHorizon">—</div></div>
+            <div class="breakRow"><div><small>Qs (total)</small></div><div id="breakQs">—</div></div>
+            <div class="breakRow" style="border-bottom:0;"><div><small>Total</small></div><div id="breakTotal">—</div></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ===== Helpers ===== */
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* Asset classes (in requested order) */
+const ASSET_CLASSES = [
+  'FD',
+  'Gold',
+  'Stocks',
+  'Mutual Funds',
+  'Real estate',
+  'Cash',
+  'Bonds',
+  'Pre-IPO shares',
+  'Alternate assets'
+];
+
+/* Predefined allocations for profiles (summing to 100) */
+const PROFILE_ALLOCATIONS = {
+  'Conservative': {
+    'FD': 25, 'Gold': 5, 'Stocks': 10, 'Mutual Funds': 10, 'Real estate': 15,
+    'Cash': 15, 'Bonds': 15, 'Pre-IPO shares': 0, 'Alternate assets': 5
+  },
+  'Moderate': {
+    'FD': 15, 'Gold': 7, 'Stocks': 25, 'Mutual Funds': 20, 'Real estate': 10,
+    'Cash': 8, 'Bonds': 10, 'Pre-IPO shares': 2, 'Alternate assets': 3
+  },
+  'Growth': {
+    'FD': 5, 'Gold': 8, 'Stocks': 35, 'Mutual Funds': 25, 'Real estate': 10,
+    'Cash': 5, 'Bonds': 7, 'Pre-IPO shares': 3, 'Alternate assets': 2
+  },
+  'Aggressive': {
+    'FD': 0, 'Gold': 5, 'Stocks': 50, 'Mutual Funds': 25, 'Real estate': 8,
+    'Cash': 2, 'Bonds': 3, 'Pre-IPO shares': 5, 'Alternate assets': 2
+  }
+};
+
+/* Mapping of detailed classes -> simplified groups
+   Adjust this mapping if you prefer different grouping rules.
+*/
+const GROUP_MAP = {
+  'Fixed Return': ['FD', 'Bonds'],        // capital-protected / fixed-like
+  'Volatile': ['Stocks', 'Pre-IPO shares', 'Alternate assets', 'Mutual Funds'], // growth / equity-like
+  'Liquid': ['Cash', 'Gold', 'Real estate'] // cash & near-cash (note: real estate treated as 'liquid' here for display purposes — change if you want)
+};
+
+/* read option for grid */
+function readOption(gridName){
+  const grid = document.querySelector(`[data-q="${gridName}"]`);
+  if (!grid) return null;
+  const btn = grid.querySelector('.optionBtn.active');
+  return btn ? Number(btn.dataset.val) : null;
+}
+
+/* handle option clicks */
+document.querySelectorAll('.qgrid').forEach(g => {
+  g.addEventListener('click', (e) => {
+    const btn = e.target.closest('.optionBtn');
+    if (!btn) return;
+    g.querySelectorAll('.optionBtn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+/* ===== Chart setup (main donut) ===== */
+const ctxMain = document.getElementById('allocDonut').getContext('2d');
+const donutMain = new Chart(ctxMain, {
+  type: 'doughnut',
+  data: {
+    labels: ASSET_CLASSES.slice(),
+    datasets: [{
+      data: Array(ASSET_CLASSES.length).fill(0),
+      backgroundColor: Array(ASSET_CLASSES.length).fill('#ccc'),
+      borderWidth: 0,
+      cutout: '60%',
+      rotation: -0.25 * Math.PI,
+      hoverOffset: 8
+    }]
+  },
+  options: {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (c) => `${c.label}: ${c.raw}%`
+        }
+      }
+    }
+  }
+});
+
+/* ===== Chart setup (simplified donut) ===== */
+const ctxSimple = document.getElementById('simpleDonut').getContext('2d');
+const donutSimple = new Chart(ctxSimple, {
+  type: 'doughnut',
+  data: {
+    labels: Object.keys(GROUP_MAP),
+    datasets: [{
+      data: [0,0,0],
+      backgroundColor: ['#ddd','#bbb','#999'],
+      borderWidth: 0,
+      cutout: '64%',
+      rotation: -0.25 * Math.PI,
+      hoverOffset: 8
+    }]
+  },
+  options: {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (c) => `${c.label}: ${c.raw}%`
+        }
+      }
+    }
+  }
+});
+
+/* High-DPI-safe gradients for main donut */
+function applyBlackGreyGradientsMain(){
+  const canvas = document.getElementById('allocDonut');
+  const rect = canvas.getBoundingClientRect();
+  const h = Math.max(canvas.height, Math.round(rect.height));
+  const n = ASSET_CLASSES.length;
+  const grads = [];
+  for (let i = 0; i < n; i++){
+    const t = i / Math.max(1, n - 1);
+    const stopTop = Math.round(240 - t*200);    // between 240 and 40
+    const stopBottom = Math.round(190 - t*140); // between 190 and 50
+    const c1 = `rgb(${stopTop},${stopTop},${stopTop})`;
+    const c2 = `rgb(${Math.max(20, stopBottom)},${Math.max(20, stopBottom)},${Math.max(20, stopBottom)})`;
+    const g = ctxMain.createLinearGradient(0,0,0,h);
+    g.addColorStop(0, c1);
+    g.addColorStop(1, c2);
+    grads.push(g);
+  }
+  donutMain.data.datasets[0].backgroundColor = grads;
+  donutMain.update();
+}
+
+/* High-DPI-safe gradients for simple donut (3 slices) */
+function applyBlackGreyGradientsSimple(){
+  const canvas = document.getElementById('simpleDonut');
+  const rect = canvas.getBoundingClientRect();
+  const h = Math.max(canvas.height, Math.round(rect.height));
+  const keys = Object.keys(GROUP_MAP);
+  const grads = [];
+  for (let i = 0; i < keys.length; i++){
+    // use three distinct shades
+    const shades = [220, 140, 80];
+    const top = shades[i % shades.length];
+    const bottom = Math.max(20, top - 80);
+    const c1 = `rgb(${top},${top},${top})`;
+    const c2 = `rgb(${bottom},${bottom},${bottom})`;
+    const g = ctxSimple.createLinearGradient(0,0,0,h);
+    g.addColorStop(0, c1);
+    g.addColorStop(1, c2);
+    grads.push(g);
+  }
+  donutSimple.data.datasets[0].backgroundColor = grads;
+  donutSimple.update();
+}
+
+/* ===== Scoring (non-weighted, 5 Qs) =====
+   - Age factor (0..25)
+   - Horizon factor (0..25)
+   - Questions: sum of 5 q values (each 0..5) => max 25 -> mapped to 0..50
+   Total scale 0..100
+*/
+function computeScoreNonWeighted(){
+  // age factor: younger -> higher
+  const age = Number(document.getElementById('age').value) || 35;
+  const ageRaw = clamp((65 - age) / (65 - 18), 0, 1);
+  const ageFactor = Math.round(ageRaw * 25);
+
+  // horizon factor: longer horizon -> higher (0..25)
+  const horizon = Number(document.getElementById('horizon').value) || 5;
+  const horizonRaw = clamp((Math.log(horizon + 1) / Math.log(16)), 0, 1);
+  const horizonFactor = Math.round(horizonRaw * 25);
+
+  // questions (equal weight) — now 5 questions
+  let qSum = 0;
+  for (let i = 1; i <= 5; i++){
+    const val = readOption('q' + i);
+    if (val === null) return { err: `Please answer question ${i}` };
+    qSum += val;
+  }
+  // qSum range 0..25 -> map to 0..50
+  const qFactor = Math.round((qSum / (5 * 5)) * 50);
+
+  const rawTotal = ageFactor + horizonFactor + qFactor;
+  const score = Math.round(clamp(rawTotal, 0, 100));
+  return { score, ageFactor, horizonFactor, qFactor, qSum };
+}
+
+/* Map score to profile & allocation (return object with id + allocation entries) */
+function profileForScore(score){
+  if (score < 30) return { id:'Conservative', ...PROFILE_ALLOCATIONS['Conservative'] };
+  if (score < 50) return { id:'Moderate', ...PROFILE_ALLOCATIONS['Moderate'] };
+  if (score < 70) return { id:'Growth', ...PROFILE_ALLOCATIONS['Growth'] };
+  return { id:'Aggressive', ...PROFILE_ALLOCATIONS['Aggressive'] };
+}
+
+/* Update allocation list DOM */
+function renderAllocList(allocation){
+  const wrap = document.getElementById('allocList');
+  wrap.innerHTML = '';
+  ASSET_CLASSES.forEach(cls => {
+    const val = allocation[cls] != null ? allocation[cls] : 0;
+    const div = document.createElement('div');
+    div.className = 'allocRow';
+    div.innerHTML = `<div>${cls}</div><div>${val}%</div>`;
+    wrap.appendChild(div);
+  });
+}
+
+/* Compute simplified grouped allocation (Fixed / Volatile / Liquid) from detailed allocation */
+function computeSimplified(allocation){
+  const groups = {};
+  Object.keys(GROUP_MAP).forEach(g => groups[g] = 0);
+  Object.keys(allocation).forEach(k => {
+    const val = allocation[k] || 0;
+    // find which group contains k
+    let found = false;
+    for (const g of Object.keys(GROUP_MAP)){
+      if (GROUP_MAP[g].includes(k)){
+        groups[g] += val;
+        found = true;
+        break;
+      }
+    }
+    if (!found){
+      // if not mapped, add to Volatile by default
+      groups['Volatile'] = (groups['Volatile'] || 0) + val;
+    }
+  });
+  // ensure sums to 100 (minor rounding fix)
+  const keys = Object.keys(groups);
+  let total = keys.reduce((s,k)=>s+groups[k],0);
+  if (total === 0) return keys.reduce((o,k)=>(o[k]=0,o),{});
+  // normalize to 100 to avoid leftover rounding differences
+  const normalized = {};
+  keys.forEach(k => normalized[k] = Math.round((groups[k] / total) * 100));
+  // adjust rounding error
+  let diff = 100 - keys.reduce((s,k)=>s+normalized[k],0);
+  while (diff !== 0){
+    // distribute leftover starting from largest bucket
+    const sorted = keys.slice().sort((a,b)=>normalized[b]-normalized[a]);
+    normalized[sorted[0]] += (diff > 0 ? 1 : -1);
+    diff = 100 - keys.reduce((s,k)=>s+normalized[k],0);
+  }
+  return normalized;
+}
+
+/* Update simplified allocation DOM */
+function renderSimpleAllocList(simpleAlloc){
+  const wrap = document.getElementById('simpleAllocList');
+  wrap.innerHTML = '';
+  Object.keys(simpleAlloc).forEach(k => {
+    const val = simpleAlloc[k] || 0;
+    const div = document.createElement('div');
+    div.className = 'allocRow';
+    div.innerHTML = `<div>${k}</div><div>${val}%</div>`;
+    wrap.appendChild(div);
+  });
+}
+
+/* Update UI from computed score */
+function updateUI(){
+  const res = computeScoreNonWeighted();
+  if (res.err){ alert(res.err); return; }
+  const score = res.score;
+  document.getElementById('scoreVal').textContent = score;
+  const profAll = profileForScore(score);
+  const profileId = profAll.id;
+  document.getElementById('profileLabel').textContent = profileId;
+
+  const alloc = {};
+  ASSET_CLASSES.forEach(k => alloc[k] = profAll[k] || 0);
+
+  document.getElementById('profileDesc').textContent =
+    profileId === 'Conservative' ? 'Capital preservation; low equity exposure.' :
+    profileId === 'Moderate' ? 'Balanced growth with income focus.' :
+    profileId === 'Growth' ? 'Growth-oriented; higher equity exposure.' :
+    'High growth appetite; mostly equities.';
+
+  document.getElementById('centerProfile').textContent = profileId;
+
+  donutMain.data.labels = ASSET_CLASSES.slice();
+  donutMain.data.datasets[0].data = ASSET_CLASSES.map(a => alloc[a] || 0);
+
+  applyBlackGreyGradientsMain();
+  renderAllocList(alloc);
+
+  // update simplified donut if visible
+  if (!document.getElementById('simpleCard').classList.contains('hidden')){
+    updateSimpleDonutFromAlloc(alloc);
+  }
+
+  document.getElementById('breakAge').textContent = res.ageFactor;
+  document.getElementById('breakHorizon').textContent = res.horizonFactor;
+  document.getElementById('breakQs').textContent = res.qFactor + ` (raw ${res.qSum})`;
+  document.getElementById('breakTotal').textContent = res.score;
+}
+
+/* Build the simplified donut from detailed allocation */
+function updateSimpleDonutFromAlloc(allocation){
+  const simplified = computeSimplified(allocation);
+  const labels = Object.keys(simplified);
+  const data = labels.map(l => simplified[l]);
+  donutSimple.data.labels = labels;
+  donutSimple.data.datasets[0].data = data;
+  applyBlackGreyGradientsSimple();
+  renderSimpleAllocList(simplified);
+  document.getElementById('simpleCenter').textContent = `${Object.keys(simplified)[0]} / ${Object.keys(simplified)[1]} / ${Object.keys(simplified)[2]}`;
+}
+
+/* event wiring */
+document.getElementById('calculateBtn').addEventListener('click', updateUI);
+document.getElementById('resetBtn').addEventListener('click', () => {
+  document.getElementById('age').value = 35;
+  document.getElementById('amount').value = 200000;
+  document.getElementById('horizon').value = 15;
+  document.querySelectorAll('.qgrid').forEach((g)=>{ 
+    g.querySelectorAll('.optionBtn').forEach(b => b.classList.remove('active'));
+    const opts = g.querySelectorAll('.optionBtn');
+    if (opts.length) opts[Math.floor(opts.length/2)].classList.add('active');
+  });
+  updateUI();
+});
+
+/* Toggle simplified card */
+const toggleBtn = document.getElementById('toggleSimpleBtn');
+toggleBtn.addEventListener('click', () => {
+  const card = document.getElementById('simpleCard');
+  const expanded = !card.classList.contains('hidden');
+  if (expanded){
+    // hide
+    card.classList.add('hidden');
+    card.setAttribute('aria-hidden','true');
+    toggleBtn.textContent = 'Show simplified allocation';
+    toggleBtn.setAttribute('aria-expanded','false');
+  } else {
+    // show & update data from current main allocation
+    const currentAlloc = {};
+    ASSET_CLASSES.forEach((k, idx) => {
+      currentAlloc[k] = donutMain.data.datasets[0].data[idx] || 0;
+    });
+    updateSimpleDonutFromAlloc(currentAlloc);
+    card.classList.remove('hidden');
+    card.setAttribute('aria-hidden','false');
+    toggleBtn.textContent = 'Hide simplified allocation';
+    toggleBtn.setAttribute('aria-expanded','true');
+    // scroll it into view a little on small screens
+    setTimeout(()=>card.scrollIntoView({behavior:'smooth', block:'center'}), 120);
+  }
+});
+
+/* Resize handling: reapply gradients so they stay crisp */
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(()=> {
+    applyBlackGreyGradientsMain();
+    applyBlackGreyGradientsSimple();
+  }, 120);
+});
+
+/* init defaults: only 5 question grids exist, set their middle options active */
+(function init(){
+  // set defaults for q1..q5
+  for (let i=1; i<=5; i++){
+    const grid = document.querySelector(`[data-q="q${i}"]`);
+    if (grid){
+      const opts = grid.querySelectorAll('.optionBtn');
+      if (opts.length) opts[Math.floor(opts.length/2)].classList.add('active');
+    }
+  }
+  applyBlackGreyGradientsMain();
+  applyBlackGreyGradientsSimple();
+  updateUI();
+})();
+</script>
+</body>
+</html>
